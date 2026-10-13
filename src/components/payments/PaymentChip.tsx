@@ -1,6 +1,7 @@
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
+import type { PaymentStatus } from "@/db/schema";
 
-export function PaymentChip({ status }: { status: "PENDING" | "SUCCESSFUL" | "FAILED" }) {
+export function PaymentChip({ status }: { status: PaymentStatus }) {
   if (status === "SUCCESSFUL")
     return (
       <span className="chip bg-forest-100 text-forest-700">
@@ -11,6 +12,12 @@ export function PaymentChip({ status }: { status: "PENDING" | "SUCCESSFUL" | "FA
     return (
       <span className="chip bg-ember-100 text-ember-600">
         <XCircle size={13} /> Failed
+      </span>
+    );
+  if (status === "CANCELLED")
+    return (
+      <span className="chip bg-forest-900/5 text-moss">
+        <Ban size={13} /> Cancelled
       </span>
     );
   return (
