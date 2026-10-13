@@ -13,7 +13,7 @@ export default async function SettingsPage() {
     <AppShell user={user}>
       <PageTitle
         title="Prices"
-        subtitle="New prices apply to the next payment or booking. Months already paid and existing bookings keep their price."
+        subtitle="Pay-as-you-go prices. Changes apply to the next registration, pickup or booking — credit already in members' accounts is not touched."
       />
       <FeesForm initial={fees} />
     </AppShell>

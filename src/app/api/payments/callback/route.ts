@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const transactionId = url.searchParams.get("transaction_id");
   const flwStatus = url.searchParams.get("status");
   const payment = txRef ? await db.query.payments.findFirst({ where: eq(payments.txRef, txRef) }) : null;
-  const back = new URL(payment?.type === "SOAKAWAY" ? "/soakaway" : "/membership", req.url);
+  const back = new URL(payment?.type === "SOAKAWAY" ? "/soakaway" : "/wallet", req.url);
 
   if (!txRef) {
     back.searchParams.set("payment", "failed");

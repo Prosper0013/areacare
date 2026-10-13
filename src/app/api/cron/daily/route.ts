@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { and, between, eq, lt, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { settings, users } from "@/db/schema";
-import { shortDate } from "@/lib/format";
-import { notifyUsers } from "@/lib/notify";
+import { settings } from "@/db/schema";
 import { sendConfirmationReminders } from "@/lib/pickups";
 import { remindTodaysEvacuations } from "@/lib/soakaway";
 import { expireStalePayments } from "@/lib/payments";
 import { startOfLagosDay } from "@/lib/ops";
-import { coverageFor, monthName } from "@/lib/billing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,9 +13,10 @@ export const dynamic = "force-dynamic";
 /**
  * Runs once a day via Vercel Cron (see vercel.json).
  * 1. Keeps the free database awake (Supabase pauses projects after 7 idle days).
- * 2. Marks members whose dues have lapsed as OVERDUE and tells them.
- * 3. Reminds members whose dues run out in 3 days.
- * 4–6. Pickup confirmation reminders, soakaway reminders, and cancelling stale pending payments.
+ * 2. Pickup confirmation reminders.
+ * 3. Morning reminders for soakaway evacuations.
+ * 4. Cancels payments still pending after 3 days.
+ * (Billing is pay-as-you-go, so there are no dues to chase.)
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -35,55 +33,18 @@ export async function GET(req: Request) {
     .values({ key: "last_heartbeat", value: now.toISOString() })
     .onConflictDoUpdate({ target: settings.key, set: { value: now.toISOString() } });
 
-  // 2. Lapsed members → OVERDUE
-  const lapsed = await db
-    .update(users)
-    .set({ membershipStatus: "OVERDUE" })
-    .where(and(eq(users.membershipStatus, "ACTIVE"), lt(users.paidThrough, now)))
-    .returning({ id: users.id });
-  if (lapsed.length) {
-    await notifyUsers(
-      lapsed.map((u) => u.id),
-      {
-        kind: "payment",
-        title: `${monthName(now)} dues are unpaid`,
-        body: `Your Trash filled button is off until you pay for ${monthName(now)}.`,
-        link: "/membership",
-        email: true,
-      },
-    );
-  }
-
-  // 3. Reminders for dues ending in ~3 days (window of one day so each member gets one reminder)
-  const from = new Date(now.getTime() + 2 * 86_400_000);
-  const to = new Date(now.getTime() + 3 * 86_400_000);
-  const dueSoon = await db
-    .select({ id: users.id, paidThrough: users.paidThrough })
-    .from(users)
-    .where(and(eq(users.membershipStatus, "ACTIVE"), between(users.paidThrough, from, to)));
-  for (const u of dueSoon) {
-    await notifyUsers([u.id], {
-      kind: "payment",
-      title: `Pay for ${monthName(coverageFor(u.paidThrough, 1).start)}`,
-      body: `You're covered until ${shortDate(u.paidThrough)}. Pay for ${monthName(coverageFor(u.paidThrough, 1).start)} before then so your Trash filled button stays on.`,
-      link: "/membership",
-    });
-  }
-
-  // 4. Pickup confirmation reminders (also run every 30 min by GitHub Actions)
+  // 2. Pickup confirmation reminders (also run every 30 min by GitHub Actions)
   const confirmations = await sendConfirmationReminders();
 
-  // 5. Morning reminders for soakaway evacuations scheduled today
+  // 3. Morning reminders for soakaway evacuations scheduled today
   const evacuationsToday = await remindTodaysEvacuations(startOfLagosDay(now));
 
-  // 6. Cancel payments (and unpaid soakaway bookings) still pending after 3 days
+  // 4. Cancel payments (and unpaid soakaway bookings) still pending after 3 days
   const expired = await expireStalePayments(now);
 
   return NextResponse.json({
     ok: true,
     at: now.toISOString(),
-    overdue: lapsed.length,
-    reminded: dueSoon.length,
     confirmations,
     evacuationsToday,
     expired,

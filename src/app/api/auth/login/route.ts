@@ -15,9 +15,13 @@ const schema = z.object({
 
 export const POST = handler(async (req: Request) => {
   const input = schema.parse(await req.json());
-  const user = await db.query.users.findFirst({ where: eq(users.email, input.email) });
+  let user = await db.query.users.findFirst({ where: eq(users.email, input.email) });
   if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) {
     throw new HttpError(401, "That email and password don't match an account.");
+  }
+  // The owner account (SUPER_ADMIN_EMAIL in Vercel) always gets super admin access.
+  if (user.role !== "SUPER_ADMIN" && process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() === user.email) {
+    [user] = await db.update(users).set({ role: "SUPER_ADMIN" }).where(eq(users.id, user.id)).returning();
   }
   await startSession(user);
 

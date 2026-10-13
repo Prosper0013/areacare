@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { STAFF_ROLES, requireUser } from "@/lib/auth";
 import { boardPickups } from "@/lib/ops";
-import { addressLine, dateTime } from "@/lib/format";
+import { addressLine, binsLabel, dateTime } from "@/lib/format";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
 import { StatusChip } from "@/components/StatusChip";
 
@@ -23,6 +23,7 @@ export default async function OpsHistory() {
             <thead className="text-moss">
               <tr className="border-b border-forest-900/10">
                 <th className="px-5 py-3 font-semibold">Member</th>
+                <th className="px-5 py-3 font-semibold">Cans</th>
                 <th className="px-5 py-3 font-semibold">Address</th>
                 <th className="px-5 py-3 font-semibold">Zone</th>
                 <th className="px-5 py-3 font-semibold">Requested</th>
@@ -38,6 +39,7 @@ export default async function OpsHistory() {
                       {p.address.name}
                     </Link>
                   </td>
+                  <td className="whitespace-nowrap px-5 py-3 font-semibold">{binsLabel(p.binCount)}</td>
                   <td className="px-5 py-3 text-moss">{addressLine(p.address)}</td>
                   <td className="px-5 py-3">{p.address.zone ?? "—"}</td>
                   <td className="px-5 py-3">{dateTime(p.createdAt)}</td>

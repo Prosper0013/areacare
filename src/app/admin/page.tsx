@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { and, asc, between, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/db";
 import { payments, pickups, soakawayBookings, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { OPEN_STATUSES } from "@/lib/pickups";
-import { startOfLagosDay } from "@/lib/ops";
-import { dateTime, naira, shortDate } from "@/lib/format";
+import { startOfLagosDay, startOfLagosMonth } from "@/lib/ops";
+import { binsLabel, dateTime, naira } from "@/lib/format";
+import { getFees } from "@/lib/settings";
+import { binsAffordable } from "@/lib/membership";
 import { revenueByMonth } from "@/lib/admin-payments";
 import { RevenueChart } from "@/components/admin/RevenueChart";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
@@ -15,22 +17,31 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminHome() {
   const user = await requireUser(["SUPER_ADMIN"]);
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  const monthStart = startOfLagosMonth();
   const since = new Date(Date.now() - 13 * 86_400_000);
   since.setHours(0, 0, 0, 0);
 
-  const now = new Date();
-  const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
-  const [[{ clearedToday }], [{ soakToApprove }]] = await Promise.all([
+  const fees = await getFees();
+  const registered = and(eq(users.role, "USER"), isNotNull(users.registeredAt), eq(users.membershipStatus, "ACTIVE"));
+  const [[{ clearedToday }], [{ soakToApprove }], [{ creditHeld, outOfCredit }], [{ cansThisMonth }]] = await Promise.all([
     db
       .select({ clearedToday: count() })
       .from(pickups)
       .where(and(eq(pickups.status, "COMPLETED"), gte(pickups.completedAt, startOfLagosDay()))),
     db.select({ soakToApprove: count() }).from(soakawayBookings).where(eq(soakawayBookings.status, "PENDING_APPROVAL")),
+    db
+      .select({
+        creditHeld: sql<number>`coalesce(sum(${users.creditBalance}), 0)`.mapWith(Number),
+        outOfCredit: sql<number>`count(*) filter (where ${users.creditBalance} < ${fees.binPrice})`.mapWith(Number),
+      })
+      .from(users)
+      .where(registered),
+    db
+      .select({ cansThisMonth: sql<number>`coalesce(sum(${pickups.binCount}), 0)`.mapWith(Number) })
+      .from(pickups)
+      .where(and(eq(pickups.status, "COMPLETED"), gte(pickups.completedAt, monthStart))),
   ]);
-  const [memberCounts, [{ open, awaiting, reopened }], [{ revenue }], daily, recentPayments, months, dueSoon, overdue] = await Promise.all([
+  const [memberCounts, [{ open, awaiting, reopened }], [{ revenue }], daily, recentPayments, months, runningLow, empty] = await Promise.all([
     db
       .select({ status: users.membershipStatus, n: count() })
       .from(users)
@@ -64,16 +75,16 @@ export default async function AdminHome() {
     }),
     revenueByMonth(6),
     db
-      .select({ id: users.id, name: users.name, phone: users.phone, paidThrough: users.paidThrough })
+      .select({ id: users.id, name: users.name, phone: users.phone, balance: users.creditBalance })
       .from(users)
-      .where(and(eq(users.role, "USER"), eq(users.membershipStatus, "ACTIVE"), between(users.paidThrough, now, weekAhead)))
-      .orderBy(asc(users.paidThrough))
+      .where(and(registered, gte(users.creditBalance, fees.binPrice), lt(users.creditBalance, fees.binPrice * 3)))
+      .orderBy(asc(users.creditBalance))
       .limit(8),
     db
-      .select({ id: users.id, name: users.name, phone: users.phone, paidThrough: users.paidThrough })
+      .select({ id: users.id, name: users.name, phone: users.phone, balance: users.creditBalance })
       .from(users)
-      .where(and(eq(users.role, "USER"), eq(users.membershipStatus, "OVERDUE")))
-      .orderBy(desc(users.paidThrough))
+      .where(and(registered, lt(users.creditBalance, fees.binPrice)))
+      .orderBy(desc(users.registeredAt))
       .limit(8),
   ]);
 
@@ -104,12 +115,12 @@ export default async function AdminHome() {
           <p className="mt-1 font-display text-4xl font-extrabold">{soakToApprove}</p>
           <p className="mt-2 text-sm font-semibold">{soakToApprove ? "Approve and schedule" : "See bookings"}</p>
         </Link>
-        <Kpi label="Cleared & confirmed today" value={clearedToday} hint={`${byStatus.ACTIVE ?? 0} active members`} />
-        <Kpi label="Dues overdue" value={byStatus.OVERDUE ?? 0} hint={`${byStatus.UNREGISTERED ?? 0} not yet registered`} />
+        <Kpi label="Cleared & confirmed today" value={clearedToday} hint={`${cansThisMonth} cans collected this month`} />
+        <Kpi label="Out of credit" value={outOfCredit} hint={`${byStatus.ACTIVE ?? 0} registered · ${byStatus.UNREGISTERED ?? 0} not yet`} />
         <Link href="/admin/payments" className="rounded-2xl bg-white p-5 shadow-ring transition hover:shadow-lift">
           <p className="text-sm text-moss">Received this month</p>
           <p className="mt-1 font-display text-4xl font-extrabold">{naira(Number(revenue ?? 0))}</p>
-          <p className="mt-2 text-sm font-semibold text-forest-600">See all payments</p>
+          <p className="mt-2 text-sm text-moss">{naira(creditHeld)} unused member credit</p>
         </Link>
       </div>
 
@@ -144,7 +155,7 @@ export default async function AdminHome() {
                       {p.user.name}
                     </Link>
                     <p className="text-xs text-moss">
-                      {p.type === "REGISTRATION" ? "Registration" : p.type === "SOAKAWAY" ? "Soakaway" : `Dues × ${p.months}`} · {dateTime(p.verifiedAt)}
+                      {p.type === "REGISTRATION" ? "Registration" : p.type === "SOAKAWAY" ? "Soakaway" : p.type === "TOPUP" ? "Credit top-up" : `Dues × ${p.months}`} · {dateTime(p.verifiedAt)}
                     </p>
                   </div>
                   <span className="font-display font-bold">{naira(p.amount)}</span>
@@ -166,18 +177,18 @@ export default async function AdminHome() {
           <RevenueChart months={months} />
         </section>
         <MemberList
-          title="Dues ending this week"
-          empty="No one's dues run out in the next 7 days."
-          rows={dueSoon}
-          note={(d) => `Ends ${shortDate(d)}`}
+          title="Running low"
+          empty="No one is down to their last couple of cans."
+          rows={runningLow}
+          note={(b) => `${naira(b)} · ${binsLabel(binsAffordable(b, fees.binPrice))}`}
         />
         <MemberList
-          title="Dues overdue"
-          empty="Everyone is paid up."
-          rows={overdue}
-          note={(d) => (d ? `Lapsed ${shortDate(d)}` : "Lapsed")}
+          title="Out of credit"
+          empty="Every registered member can request a pickup."
+          rows={empty}
+          note={(b) => naira(b)}
           tone="ember"
-          more={(byStatus.OVERDUE ?? 0) > overdue.length ? "/admin/users?status=OVERDUE" : undefined}
+          more={outOfCredit > empty.length ? "/admin/users?credit=empty" : undefined}
         />
       </div>
     </AppShell>
@@ -193,9 +204,9 @@ function MemberList({
   more,
 }: {
   title: string;
-  rows: { id: string; name: string; phone: string; paidThrough: Date | null }[];
+  rows: { id: string; name: string; phone: string; balance: number }[];
   empty: string;
-  note: (d: Date | null) => string;
+  note: (balance: number) => string;
   tone?: "ember";
   more?: string;
 }) {
@@ -213,7 +224,7 @@ function MemberList({
                 <p className="text-xs text-moss">{r.phone}</p>
               </Link>
               <span className={tone === "ember" ? "chip shrink-0 bg-ember-100 text-ember-600" : "chip shrink-0 bg-vest-100 text-forest-900"}>
-                {note(r.paidThrough)}
+                {note(r.balance)}
               </span>
             </li>
           ))}

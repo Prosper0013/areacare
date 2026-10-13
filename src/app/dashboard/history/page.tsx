@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { pickups } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { dateTime } from "@/lib/format";
+import { binsLabel, dateTime, naira } from "@/lib/format";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
 import { StatusChip } from "@/components/StatusChip";
 
@@ -23,14 +23,18 @@ export default async function HistoryPage() {
       {rows.length === 0 ? (
         <div className="panel p-10 text-center">
           <p className="font-display text-xl font-bold">No pickups yet</p>
-          <p className="mt-1 text-moss">When your bin fills up, press Trash filled on your home screen.</p>
+          <p className="mt-1 text-moss">When your bins fill up, press Trash filled on your home screen.</p>
         </div>
       ) : (
         <ul className="panel divide-y divide-forest-900/5">
           {rows.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
               <div>
-                <p className="font-semibold">Requested {dateTime(p.createdAt)}</p>
+                <p className="font-semibold">
+                  {binsLabel(p.binCount)}
+                  {p.charge ? ` · ${naira(p.charge)}${p.refundedAt ? " refunded" : ""}` : ""}
+                  <span className="font-normal text-moss"> · {dateTime(p.createdAt)}</span>
+                </p>
                 <p className="text-sm text-moss">
                   {p.completedAt
                     ? `Cleared · confirmed ${dateTime(p.completedAt)}${p.confirmedBy === "management" ? " by AreaCare" : ""}`

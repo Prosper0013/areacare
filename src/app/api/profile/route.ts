@@ -47,5 +47,5 @@ export const PUT = handler(async (req: Request) => {
     })
     .where(eq(users.id, user.id));
 
-  return ok({ redirect: user.registeredAt ? "/dashboard" : "/membership" });
+  return ok({ redirect: user.registeredAt ? "/dashboard" : "/wallet" });
 });

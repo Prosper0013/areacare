@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { BellRing, MapPin, ShieldCheck, Smartphone } from "lucide-react";
+import { BellRing, MapPin, PiggyBank, ShieldCheck, Smartphone, Trash2, Wallet } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HeroDemo } from "@/components/HeroDemo";
-import { getFees, type Fees } from "@/lib/settings";
+import { DEFAULT_FEES, getFees, type Fees } from "@/lib/settings";
+import { PriceCalculator } from "@/components/PriceCalculator";
 import { naira } from "@/lib/format";
 import { db } from "@/db";
 import { zones } from "@/db/schema";
@@ -14,22 +15,22 @@ async function loadPublicData(): Promise<{ fees: Fees; zoneNames: string[] }> {
     const [fees, zoneRows] = await Promise.all([getFees(), db.select({ name: zones.name }).from(zones)]);
     return { fees, zoneNames: zoneRows.map((z) => z.name) };
   } catch {
-    return { fees: { registrationFee: 5000, monthlyFee: 2000, soakawayFee: 25000 }, zoneNames: [] };
+    return { fees: DEFAULT_FEES, zoneNames: [] };
   }
 }
 
-const STEPS = [
+const steps = (f: Fees) => [
   {
     title: "Create your account",
-    body: "Sign up with your email and phone number, then add your house details and drop a pin on your gate.",
+    body: "Sign up with your email and phone number. Tap “use my location” and your address fills itself in.",
   },
   {
     title: "Register your home",
-    body: "Pay the one-time registration fee through Flutterwave by card, bank transfer or USSD.",
+    body: `Pay ${naira(f.registrationFee)} once by card, transfer or USSD. ${naira(f.registrationCredit)} of it lands in your pickup credit straight away.`,
   },
   {
-    title: "Tap when the bin is full",
-    body: "Press Trash filled. Your area crew and management get your address and live location at once.",
+    title: "Tap, and pay per can",
+    body: `Press Trash filled and say how many cans are full. ${naira(f.binPrice)} each comes off your credit — top up whenever you like.`,
   },
 ];
 
@@ -59,8 +60,8 @@ export default async function Home() {
             One tap, and the truck is on its way.
           </h1>
           <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-moss">
-            AreaCare collects household waste when you need it, not on a fixed day. Register your home once, and press
-            a single button whenever your bin fills up.
+            AreaCare collects household waste when you need it, not on a fixed day. No monthly fees — you only pay for the
+            trash cans we actually empty.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link href="/signup" className="btn-primary px-6 py-3.5 text-base">
@@ -73,14 +74,18 @@ export default async function Home() {
               Soakaway evacuation
             </a>
           </div>
-          <dl className="mt-10 grid max-w-md grid-cols-2 gap-6 border-t border-forest-900/10 pt-6">
+          <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-forest-900/10 pt-6 sm:gap-6">
             <div>
               <dt className="text-sm text-moss">Registration</dt>
-              <dd className="font-display text-2xl font-bold">{naira(fees.registrationFee)}</dd>
+              <dd className="font-display text-xl font-bold sm:text-2xl">{naira(fees.registrationFee)}</dd>
             </div>
             <div>
-              <dt className="text-sm text-moss">Then monthly</dt>
-              <dd className="font-display text-2xl font-bold">{naira(fees.monthlyFee)}</dd>
+              <dt className="text-sm text-moss">Credit included</dt>
+              <dd className="font-display text-xl font-bold sm:text-2xl">{naira(fees.registrationCredit)}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-moss">Per trash can</dt>
+              <dd className="font-display text-xl font-bold sm:text-2xl">{naira(fees.binPrice)}</dd>
             </div>
           </dl>
         </div>
@@ -95,7 +100,7 @@ export default async function Home() {
         <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
           <h2 className="max-w-xl text-4xl font-bold leading-tight sm:text-5xl">From full bin to empty bin in three steps</h2>
           <ol className="mt-12 grid gap-10 md:grid-cols-3">
-            {STEPS.map((s, i) => (
+            {steps(fees).map((s, i) => (
               <li key={s.title} className="relative">
                 <span className="font-display text-[88px] font-extrabold leading-none text-vest-500/90">{i + 1}</span>
                 <h3 className="mt-3 text-2xl font-bold">{s.title}</h3>
@@ -119,6 +124,7 @@ export default async function Home() {
               [MapPin, "Live location", "Opens straight into Google Maps directions for the driver."],
               [BellRing, "Instant alerts", "Management and your area crew are notified on their phones together."],
               [Smartphone, "Progress you can see", "Watch your request move from received to on the way to collected."],
+              [Trash2, "Exactly how many cans", "The crew sees how many trash cans to bring the truck for."],
               [ShieldCheck, "Secure payments", "Card, transfer and USSD through Flutterwave. We never see your card."],
             ].map(([Icon, title, body]) => {
               const I = Icon as typeof MapPin;
@@ -146,7 +152,7 @@ export default async function Home() {
             </div>
             <div className="panel hazard-edge overflow-hidden p-4 pt-5">
               <div className="flex items-center justify-between">
-                <span className="chip bg-ember-100 text-ember-600">Trash filled</span>
+                <span className="chip bg-ember-100 text-ember-600">Trash filled · 3 cans</span>
                 <span className="text-xs text-moss">just now</span>
               </div>
               <p className="mt-3 font-display text-xl font-bold">Amaka Okafor</p>
@@ -175,21 +181,43 @@ export default async function Home() {
       {/* Pricing */}
       <section id="pricing" className="bg-white">
         <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
-          <h2 className="text-4xl font-bold sm:text-5xl">Simple membership</h2>
+          <p className="chip bg-vest-100 text-forest-900">No monthly fees</p>
+          <h2 className="mt-4 text-4xl font-bold sm:text-5xl">Pay as you go</h2>
           <p className="mt-3 max-w-xl text-lg text-moss">
-            One registration fee to join, then a flat monthly fee. Request as many pickups as your home needs.
+            Register once, then pay only for the trash cans we collect. Quiet month? You pay nothing.
           </p>
-          <div className="mt-10 grid gap-5 md:grid-cols-2">
+          <div className="mt-10 grid gap-5 lg:grid-cols-3">
             <div className="rounded-3xl bg-forest-900 p-8 text-white">
               <p className="text-white/70">Registration, one time</p>
               <p className="mt-2 font-display text-6xl font-extrabold">{naira(fees.registrationFee)}</p>
-              <p className="mt-4 text-white/80">Activates your home and covers pickups for the month you join.</p>
+              <p className="mt-4 text-white/80">
+                Puts your home on your area crew&apos;s route. Includes{" "}
+                <span className="font-semibold text-vest-400">{naira(fees.registrationCredit)} pickup credit</span> — that&apos;s{" "}
+                {Math.floor(fees.registrationCredit / Math.max(1, fees.binPrice))} cans already paid for.
+              </p>
             </div>
             <div className="rounded-3xl border-2 border-forest-900/10 p-8">
-              <p className="text-moss">Monthly dues</p>
-              <p className="mt-2 font-display text-6xl font-extrabold">{naira(fees.monthlyFee)}</p>
-              <p className="mt-4 text-moss">Pay before each month ends to keep the next month covered, or pay several months ahead.</p>
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-vest-500 text-forest-900">
+                <Trash2 size={22} />
+              </span>
+              <p className="mt-4 text-moss">Per filled trash can</p>
+              <p className="mt-1 font-display text-6xl font-extrabold">{naira(fees.binPrice)}</p>
+              <p className="mt-4 text-moss">Taken from your credit when you press Trash filled. Cancel before we come and it&apos;s refunded.</p>
             </div>
+            <div className="rounded-3xl border-2 border-forest-900/10 p-8">
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-forest-100 text-forest-600">
+                <Wallet size={22} />
+              </span>
+              <p className="mt-4 text-moss">Top up</p>
+              <p className="mt-1 font-display text-5xl font-extrabold leading-[1.1]">Any amount</p>
+              <p className="mt-4 flex gap-2 text-moss">
+                <PiggyBank size={20} className="mt-0.5 shrink-0 text-forest-600" />
+                Add credit by card, transfer or USSD whenever it runs low. It never expires.
+              </p>
+            </div>
+          </div>
+          <div className="mt-8">
+            <PriceCalculator binPrice={fees.binPrice} startCredit={fees.registrationCredit} />
           </div>
           <Link href="/signup" className="btn-vest mt-8 px-6 py-3.5 text-base">
             Create your account

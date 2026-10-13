@@ -6,23 +6,26 @@ import clsx from "clsx";
 import { db } from "@/db";
 import { payments, pickups, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { daysLeft } from "@/lib/membership";
+import { binsAffordable } from "@/lib/membership";
+import { walletHistory } from "@/lib/wallet";
 import { memberPaymentSummary } from "@/lib/payment-stats";
 import { getFees } from "@/lib/settings";
-import { addressLine, dateTime, mapsLink, naira, shortDate } from "@/lib/format";
+import { addressLine, binsLabel, dateTime, mapsLink, naira, shortDate } from "@/lib/format";
 import { AppShell } from "@/components/shell/AppShell";
 import { PaymentsTable } from "@/components/payments/PaymentsTable";
 import { StatusChip } from "@/components/StatusChip";
 import { Map } from "@/components/map/Map";
 import { MemberActions } from "@/components/admin/MemberActions";
 import { RecordPayment } from "@/components/admin/RecordPayment";
+import { AdjustCredit } from "@/components/admin/AdjustCredit";
+import { CreditHistory } from "@/components/wallet/CreditHistory";
 
 export const metadata = { title: "Member" };
 export const dynamic = "force-dynamic";
 
 const STATUS = {
   ACTIVE: ["Active", "bg-forest-100 text-forest-700"],
-  OVERDUE: ["Dues overdue", "bg-ember-100 text-ember-600"],
+  OVERDUE: ["Active", "bg-forest-100 text-forest-700"], // old monthly plan
   UNREGISTERED: ["Not registered", "bg-forest-900/5 text-moss"],
   SUSPENDED: ["Suspended", "bg-forest-900 text-white"],
 } as const;
@@ -38,7 +41,7 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
   });
   if (!u) notFound();
 
-  const [paymentRows, pickupRows, summary, fees] = await Promise.all([
+  const [paymentRows, pickupRows, summary, fees, credit] = await Promise.all([
     db.query.payments.findMany({ where: eq(payments.userId, u.id), orderBy: desc(payments.createdAt), limit: 200 }),
     db.query.pickups.findMany({
       where: eq(pickups.userId, u.id),
@@ -48,12 +51,14 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
     }),
     memberPaymentSummary(u.id),
     getFees(),
+    walletHistory(u.id, 200),
   ]);
 
   const isMember = u.role === "USER";
   const [statusLabel, statusCls] = STATUS[u.membershipStatus];
-  const left = daysLeft(u);
-  const collected = pickupRows.filter((p) => p.status === "COMPLETED").length;
+  const cans = binsAffordable(u.creditBalance, fees.binPrice);
+  const collected = pickupRows.filter((p) => p.status === "COMPLETED");
+  const cansCollected = collected.reduce((n, p) => n + p.binCount, 0);
 
   return (
     <AppShell user={me}>
@@ -93,12 +98,10 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
               {summary.successfulCount} payment{summary.successfulCount === 1 ? "" : "s"}
             </p>
           </div>
-          <div className="rounded-2xl bg-white p-5 shadow-ring">
-            <dt className="text-sm text-moss">Paid through</dt>
-            <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">{shortDate(u.paidThrough)}</dd>
-            <p className={clsx("mt-1 text-sm", u.membershipStatus === "OVERDUE" ? "font-semibold text-ember-600" : "text-moss")}>
-              {!u.registeredAt ? "Never registered" : u.membershipStatus === "ACTIVE" ? `${left} days left` : "Overdue"}
-            </p>
+          <div className={clsx("rounded-2xl p-5", u.registeredAt && cans === 0 ? "bg-ember-100" : "bg-white shadow-ring")}>
+            <dt className={clsx("text-sm", u.registeredAt && cans === 0 ? "font-semibold text-ember-600" : "text-moss")}>Credit</dt>
+            <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">{naira(u.creditBalance)}</dd>
+            <p className="mt-1 text-sm text-moss">{!u.registeredAt ? "Never registered" : `Enough for ${binsLabel(cans)}`}</p>
           </div>
           <div className="rounded-2xl bg-white p-5 shadow-ring">
             <dt className="text-sm text-moss">Registered</dt>
@@ -108,7 +111,9 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
           <div className="rounded-2xl bg-white p-5 shadow-ring">
             <dt className="text-sm text-moss">Pickups</dt>
             <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">{pickupRows.length}</dd>
-            <p className="mt-1 text-sm text-moss">{collected} cleared & confirmed</p>
+            <p className="mt-1 text-sm text-moss">
+              {collected.length} cleared · {binsLabel(cansCollected)}
+            </p>
           </div>
         </dl>
       )}
@@ -170,6 +175,21 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
             <PaymentsTable rows={paymentRows} view="admin" hideMember empty="This member hasn't made any payments." />
           </section>
 
+          {u.registeredAt && (
+            <section className="panel mt-6 overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-forest-900/5 px-5 py-4">
+                <div>
+                  <h2 className="text-xl font-bold">Credit history</h2>
+                  <p className="text-sm text-moss">
+                    {naira(u.creditBalance)} now · {naira(fees.binPrice)} per trash can
+                  </p>
+                </div>
+                <AdjustCredit userId={u.id} balance={u.creditBalance} />
+              </div>
+              <CreditHistory rows={credit} admin empty="No credit movements yet." />
+            </section>
+          )}
+
           <section className="panel mt-6 overflow-hidden">
             <h2 className="border-b border-forest-900/5 px-5 py-4 text-xl font-bold">Pickup requests</h2>
             {pickupRows.length === 0 ? (
@@ -180,7 +200,12 @@ export default async function MemberProfile({ params }: { params: Promise<{ id: 
                   <li key={p.id}>
                     <Link href={`/ops/requests/${p.id}`} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 hover:bg-forest-50">
                       <div>
-                        <p className="font-semibold">Requested {dateTime(p.createdAt)}</p>
+                        <p className="font-semibold">
+                          {binsLabel(p.binCount)}
+                          {p.charge ? ` · ${naira(p.charge)}` : ""}
+                          {p.refundedAt ? " · refunded" : ""}
+                          <span className="font-normal text-moss"> · {dateTime(p.createdAt)}</span>
+                        </p>
                         <p className="text-sm text-moss">
                           {p.completedAt
                             ? `Cleared · confirmed ${dateTime(p.completedAt)} by ${p.confirmedBy === "management" ? "management" : "member"}`

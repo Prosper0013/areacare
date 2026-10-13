@@ -1,15 +1,14 @@
 import { notFound } from "next/navigation";
-import { periodLabel } from "@/lib/billing";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { payments, zones } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { addressLine, appointment, fullDateTime, isManualPayment, naira, shortDate } from "@/lib/format";
+import { addressLine, appointment, fullDateTime, isManualPayment, naira } from "@/lib/format";
 import { LogoMark } from "@/components/Logo";
 import { PrintButton } from "@/components/payments/PrintButton";
-import { paymentLabel } from "@/components/payments/PaymentsTable";
+import { paymentDetail, paymentLabel } from "@/components/payments/PaymentsTable";
 
 export const metadata = { title: "Receipt" };
 export const dynamic = "force-dynamic";
@@ -77,7 +76,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           <thead>
             <tr className="border-b-2 border-forest-900 text-moss">
               <th className="py-3 font-semibold">Description</th>
-              <th className="py-3 font-semibold">Period</th>
+              <th className="py-3 font-semibold">Details</th>
               <th className="py-3 text-right font-semibold">Amount</th>
             </tr>
           </thead>
@@ -85,13 +84,14 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
             <tr className="border-b border-forest-900/10">
               <td className="py-4">
                 <p className="font-semibold">{paymentLabel(p)}</p>
-                {p.type === "REGISTRATION" && <p className="text-moss">Includes pickups for the month you joined</p>}
+                {p.type === "REGISTRATION" && <p className="text-moss">Registers your home with AreaCare</p>}
+                {p.type === "TOPUP" && <p className="text-moss">Pay-as-you-go pickup credit</p>}
                 {p.type === "SOAKAWAY" && p.booking?.scheduledFor && (
                   <p className="text-moss">Scheduled for {appointment(p.booking.scheduledFor)}</p>
                 )}
               </td>
               <td className="py-4">
-                {p.type === "SOAKAWAY" ? "One-off service" : periodLabel(p.periodStart, p.periodEnd)}
+                {paymentDetail(p)}
               </td>
               <td className="py-4 text-right font-semibold">{naira(p.amount)}</td>
             </tr>
@@ -109,7 +109,9 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         <p className="mt-12 rounded-xl bg-forest-50 px-4 py-3 text-sm text-forest-700">
           {p.type === "SOAKAWAY"
             ? "Payment received with thanks for your soakaway evacuation."
-            : `Payment received with thanks. Membership is active until ${shortDate(p.periodEnd)}.`}
+            : p.type === "MONTHLY"
+              ? "Payment received with thanks."
+              : `Payment received with thanks. ${naira(p.creditAmount)} was added to your pickup credit.`}
         </p>
       </article>
     </div>

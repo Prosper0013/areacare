@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { pickups } from "@/db/schema";
 import { STAFF_ROLES, requireUser } from "@/lib/auth";
 import { visibleZoneIds } from "@/lib/ops";
-import { addressLine, dateTime, mapsLink } from "@/lib/format";
+import { addressLine, binsLabel, dateTime, mapsLink, naira } from "@/lib/format";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatusChip } from "@/components/StatusChip";
 import { Map } from "@/components/map/Map";
@@ -41,12 +41,19 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-3xl font-bold">{a.name}</h1>
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-vest-500 px-3 py-1 font-display text-lg font-bold text-forest-900">
+                {binsLabel(p.binCount)}
+              </p>
               <p className="mt-1 text-moss">Requested {dateTime(p.createdAt)}</p>
             </div>
             <StatusChip status={p.status} />
           </div>
 
           <dl className="mt-6 space-y-4">
+            <Detail
+              label="Trash cans"
+              value={`${binsLabel(p.binCount)}${user.role !== "STAFF" && p.charge ? ` · ${naira(p.charge)} charged${p.refundedAt ? " (refunded)" : ""}` : ""}`}
+            />
             <Detail label="Address" value={addressLine(a) || "Not provided"} />
             {a.landmark && <Detail label="Landmark" value={a.landmark} />}
             {a.houseDescription && <Detail label="Finding the bin" value={a.houseDescription} />}

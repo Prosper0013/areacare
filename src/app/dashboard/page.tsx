@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
-import { coverageFor, monthName, periodLabel } from "@/lib/billing";
 import Link from "next/link";
-import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { payments, pickups, soakawayBookings } from "@/db/schema";
-import { getFees } from "@/lib/settings";
-import { Truck } from "lucide-react";
+import { MAX_BINS_PER_REQUEST, getFees } from "@/lib/settings";
+import { Trash2, Truck, Wallet } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { canRequestPickup, daysLeft, hasHouseDetails } from "@/lib/membership";
-import { addressLine, appointment, naira, shortDate } from "@/lib/format";
+import { binsAffordable, hasHouseDetails, pickupBlock } from "@/lib/membership";
+import { startOfLagosMonth } from "@/lib/ops";
+import { paymentDetail } from "@/components/payments/PaymentsTable";
+import { addressLine, appointment, binsLabel, naira, shortDate } from "@/lib/format";
 import { memberPaymentSummary } from "@/lib/payment-stats";
 import { PaymentChip } from "@/components/payments/PaymentChip";
 import { paymentLabel } from "@/components/payments/PaymentsTable";
@@ -25,18 +26,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   if (!hasHouseDetails(user)) redirect("/onboarding");
   const { confirm } = await searchParams;
 
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  const monthStart = startOfLagosMonth();
 
-  const [open, last, [{ thisMonth }], recentPayments, paySummary, nextEvacuation, fees] = await Promise.all([
+  const [open, last, [{ thisMonth, cansThisMonth }], recentPayments, paySummary, nextEvacuation, fees] = await Promise.all([
     openPickupFor(user.id),
     db.query.pickups.findFirst({
       where: and(eq(pickups.userId, user.id), eq(pickups.status, "COMPLETED")),
       orderBy: desc(pickups.completedAt),
     }),
     db
-      .select({ thisMonth: count() })
+      .select({
+        thisMonth: count(),
+        cansThisMonth: sql<number>`coalesce(sum(${pickups.binCount}) filter (where ${pickups.status} <> 'CANCELLED'), 0)`.mapWith(Number),
+      })
       .from(pickups)
       .where(and(eq(pickups.userId, user.id), gte(pickups.createdAt, monthStart))),
     db.query.payments.findMany({ where: eq(payments.userId, user.id), orderBy: desc(payments.createdAt), limit: 4 }),
@@ -55,15 +57,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const recentlyCleared =
     !open && last?.completedAt && Date.now() - last.completedAt.getTime() < 86_400_000 ? last : null;
 
-  const allowed = canRequestPickup(user);
-  const lockedReason = allowed
-    ? null
-    : user.membershipStatus === "SUSPENDED"
-      ? "suspended"
-      : user.registeredAt
-        ? "renew"
-        : "register";
-  const left = daysLeft(user);
+  const lockedReason = pickupBlock(user, fees.binPrice);
+  const allowed = lockedReason === null;
+  const cans = binsAffordable(user.creditBalance, fees.binPrice);
   const firstName = user.name.split(" ")[0];
 
   return (
@@ -74,14 +70,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           {open?.status === "AWAITING_CONFIRMATION"
             ? "Your crew says the bin is cleared. Please confirm below."
             : open ? "Your pickup is in progress."
-            : recentlyCleared ? "Your last pickup was cleared and confirmed." : allowed ? "Your bin is covered. Tap when it's full." : "Finish setting up to start requesting pickups."}
+            : recentlyCleared ? "Your last pickup was cleared and confirmed." : allowed ? `You have credit for ${binsLabel(cans)}. Tap when your bins are full.` : lockedReason === "topup" ? "Top up your credit to request a pickup." : "Finish setting up to start requesting pickups."}
         </p>
       </div>
 
       <TrashFilledPanel
         canRequest={allowed}
         lockedReason={lockedReason}
-        payMonth={monthName(coverageFor(user.paidThrough, 1).start)}
+        balance={user.creditBalance}
+        binPrice={fees.binPrice}
+        maxBins={MAX_BINS_PER_REQUEST}
         address={addressLine(user)}
         landmark={user.landmark}
         hasHomePin={user.homeLat != null}
@@ -92,18 +90,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <PushToggle className="mt-6" />
 
       <dl className="mt-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl bg-white p-5 shadow-ring">
-          <dt className="text-sm text-moss">Membership</dt>
+        <div className={user.registeredAt && cans === 0 ? "rounded-2xl bg-ember-100 p-5" : "rounded-2xl bg-forest-900 p-5 text-white"}>
+          <dt className={user.registeredAt && cans === 0 ? "flex items-center gap-1.5 text-sm font-semibold text-ember-600" : "flex items-center gap-1.5 text-sm text-white/70"}>
+            <Wallet size={15} /> Credit
+          </dt>
           <dd className="mt-1 font-display text-2xl font-bold">
-            {user.registeredAt ? (allowed ? `Paid for ${monthName(user.paidThrough!)}` : "Dues overdue") : "Not registered"}
+            {user.registeredAt ? naira(user.creditBalance) : "Not registered"}
           </dd>
-          <Link href="/membership" className="mt-2 inline-block text-sm font-semibold text-forest-600 hover:underline">
-            {user.registeredAt ? "Pay dues" : "Register"}
+          <p className={user.registeredAt && cans === 0 ? "mt-0.5 text-sm" : "mt-0.5 text-sm text-white/70"}>
+            {user.registeredAt ? `${binsLabel(cans)} · ${naira(fees.binPrice)} each` : `${naira(fees.registrationFee)} incl. ${naira(fees.registrationCredit)} credit`}
+          </p>
+          <Link href="/wallet" className={user.registeredAt && cans === 0 ? "btn-vest btn-sm mt-3" : "mt-2 inline-block text-sm font-semibold text-vest-400 hover:underline"}>
+            {user.registeredAt ? "Top up" : "Register"}
           </Link>
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-ring">
-          <dt className="text-sm text-moss">Requests this month</dt>
-          <dd className="mt-1 font-display text-2xl font-bold">{thisMonth}</dd>
+          <dt className="flex items-center gap-1.5 text-sm text-moss">
+            <Trash2 size={15} /> Cans collected this month
+          </dt>
+          <dd className="mt-1 font-display text-2xl font-bold">{cansThisMonth}</dd>
+          <p className="mt-0.5 text-sm text-moss">
+            {thisMonth} request{thisMonth === 1 ? "" : "s"}
+          </p>
           <Link href="/dashboard/history" className="mt-2 inline-block text-sm font-semibold text-forest-600 hover:underline">
             See history
           </Link>
@@ -151,7 +159,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         {recentPayments.length === 0 ? (
           <p className="px-5 py-8 text-center text-moss">
             No payments yet.{" "}
-            <Link href="/membership" className="font-semibold text-forest-600 hover:underline">
+            <Link href="/wallet" className="font-semibold text-forest-600 hover:underline">
               Register your home
             </Link>{" "}
             to get started.
@@ -168,7 +176,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                     <p className="font-semibold">{paymentLabel(p)}</p>
                     <p className="text-sm text-moss">
                       {shortDate(p.verifiedAt ?? p.createdAt)}
-                      {p.periodEnd ? ` · ${periodLabel(p.periodStart, p.periodEnd)}` : ""}
+                      {paymentDetail(p) ? ` · ${paymentDetail(p)}` : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

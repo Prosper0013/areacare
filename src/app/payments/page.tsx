@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { coverageFor, monthName } from "@/lib/billing";
 import { desc, eq } from "drizzle-orm";
 import clsx from "clsx";
 import { db } from "@/db";
 import { payments } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { canRequestPickup, daysLeft } from "@/lib/membership";
+import { binsAffordable } from "@/lib/membership";
 import { memberPaymentSummary } from "@/lib/payment-stats";
 import { getFees } from "@/lib/settings";
-import { naira, shortDate } from "@/lib/format";
+import { binsLabel, naira, shortDate } from "@/lib/format";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
 import { PaymentsTable } from "@/components/payments/PaymentsTable";
 
@@ -27,17 +26,16 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
     db.query.payments.findMany({ where: eq(payments.userId, user.id), orderBy: desc(payments.createdAt), limit: 500 }),
   ]);
   const rows = filter ? all.filter((p) => matches(p.status)) : all;
-  const active = canRequestPickup(user);
-  const left = daysLeft(user);
+  const cans = binsAffordable(user.creditBalance, fees.binPrice);
 
   return (
     <AppShell user={user}>
       <PageTitle
         title="Payments"
-        subtitle="Every payment you've made to AreaCare, what it covered, and a receipt for each."
+        subtitle="Every payment you've made to AreaCare — registration, top-ups and soakaway — with a receipt for each."
         action={
-          <Link href="/membership" className="btn-vest">
-            {user.registeredAt ? "Pay monthly dues" : "Pay registration"}
+          <Link href="/wallet" className="btn-vest">
+            {user.registeredAt ? "Top up credit" : "Pay registration"}
           </Link>
         }
       />
@@ -51,21 +49,19 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
           </p>
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-ring">
-          <dt className="text-sm text-moss">Paid through</dt>
-          <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">{user.paidThrough ? shortDate(user.paidThrough) : "—"}</dd>
-          <p className={clsx("mt-1 text-sm", active ? "text-moss" : "font-semibold text-ember-600")}>
-            {!user.registeredAt ? "Not registered yet" : active ? `${left} day${left === 1 ? "" : "s"} left` : "Dues overdue"}
+          <dt className="text-sm text-moss">Credit left</dt>
+          <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">{user.registeredAt ? naira(user.creditBalance) : "—"}</dd>
+          <p className={clsx("mt-1 text-sm", !user.registeredAt || cans > 0 ? "text-moss" : "font-semibold text-ember-600")}>
+            {!user.registeredAt ? "Not registered yet" : cans > 0 ? `Enough for ${binsLabel(cans)}` : "Top up to request pickups"}
           </p>
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-ring">
-          <dt className="text-sm text-moss">Next payment</dt>
+          <dt className="text-sm text-moss">{user.registeredAt ? "Price per trash can" : "Registration"}</dt>
           <dd className="mt-1 font-display text-xl font-extrabold sm:text-3xl">
-            {naira(user.registeredAt ? fees.monthlyFee : fees.registrationFee)}
+            {naira(user.registeredAt ? fees.binPrice : fees.registrationFee)}
           </dd>
           <p className="mt-1 text-sm text-moss">
-            {user.registeredAt
-              ? `For ${monthName(coverageFor(user.paidThrough, 1).start)} · pay by ${shortDate(active ? user.paidThrough : new Date())}`
-              : "Registration fee"}
+            {user.registeredAt ? "Taken from credit per pickup" : `Includes ${naira(fees.registrationCredit)} credit`}
           </p>
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-ring">

@@ -5,12 +5,12 @@ import { HttpError, apiUser } from "@/lib/auth";
 import { handler, ok } from "@/lib/api";
 import { createCheckout } from "@/lib/flutterwave";
 import { hasHouseDetails } from "@/lib/membership";
-import { getFees } from "@/lib/settings";
-import { coverageFor, periodLabel } from "@/lib/billing";
+import { MAX_TOPUP, getFees } from "@/lib/settings";
+import { naira } from "@/lib/format";
 
 const schema = z.object({
-  type: z.enum(["REGISTRATION", "MONTHLY"]),
-  months: z.number().int().min(1).max(12).default(1),
+  type: z.enum(["REGISTRATION", "TOPUP"]),
+  amount: z.number().int().optional(), // top-ups only
 });
 
 export const POST = handler(async (req: Request) => {
@@ -20,16 +20,26 @@ export const POST = handler(async (req: Request) => {
   if (!hasHouseDetails(user)) throw new HttpError(409, "Add your house details before paying.");
   if (user.membershipStatus === "SUSPENDED") throw new HttpError(403, "Your account is suspended. Contact AreaCare support.");
   if (input.type === "REGISTRATION" && user.registeredAt) throw new HttpError(409, "You're already registered.");
-  if (input.type === "MONTHLY" && !user.registeredAt) throw new HttpError(409, "Pay the registration fee first.");
+  if (input.type === "TOPUP" && !user.registeredAt) throw new HttpError(409, "Pay the registration fee first.");
 
   const fees = await getFees();
-  const months = input.type === "REGISTRATION" ? 1 : input.months;
-  const amount = input.type === "REGISTRATION" ? fees.registrationFee : fees.monthlyFee * months;
-  const txRef = `AC-${input.type === "REGISTRATION" ? "REG" : "MTH"}-${Date.now().toString(36)}-${crypto
+  let amount: number;
+  let creditAmount: number;
+  if (input.type === "REGISTRATION") {
+    amount = fees.registrationFee;
+    creditAmount = fees.registrationCredit;
+  } else {
+    amount = Math.round(input.amount ?? 0);
+    if (amount < fees.binPrice) throw new HttpError(400, `The smallest top-up is ${naira(fees.binPrice)} (one trash can).`);
+    if (amount > MAX_TOPUP) throw new HttpError(400, `The largest single top-up is ${naira(MAX_TOPUP)}.`);
+    creditAmount = amount;
+  }
+
+  const txRef = `AC-${input.type === "REGISTRATION" ? "REG" : "TOP"}-${Date.now().toString(36)}-${crypto
     .randomUUID()
     .slice(0, 8)}`.toUpperCase();
 
-  await db.insert(payments).values({ userId: user.id, txRef, type: input.type, amount, months });
+  await db.insert(payments).values({ userId: user.id, txRef, type: input.type, amount, creditAmount, months: 0 });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const link = await createCheckout({
@@ -40,11 +50,8 @@ export const POST = handler(async (req: Request) => {
     title: "AreaCare",
     description:
       input.type === "REGISTRATION"
-        ? `Membership registration (covers ${periodLabel(coverageFor(null, 1).start, coverageFor(null, 1).end)})`
-        : `Monthly dues for ${(() => {
-            const c = coverageFor(user.paidThrough, months);
-            return periodLabel(c.start, c.end);
-          })()}`,
+        ? `Home registration (includes ${naira(creditAmount)} pickup credit)`
+        : `Pickup credit top-up`,
     meta: { userId: user.id, type: input.type },
   });
 

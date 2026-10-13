@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNotNull, lt, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { membershipEnum, roleEnum, teams, users, type MembershipStatus, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { getFees } from "@/lib/settings";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
 import { UserRow, type AdminUserRow } from "@/components/admin/UserRow";
 
@@ -16,14 +17,17 @@ const ROLE_FILTERS: { key: Role | "ALL"; label: string }[] = [
   { key: "SUPER_ADMIN", label: "Super admins" },
 ];
 
-export default async function UsersPage({ searchParams }: { searchParams: Promise<{ q?: string; role?: string; status?: string }> }) {
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ q?: string; role?: string; status?: string; credit?: string }> }) {
   const me = await requireUser(["SUPER_ADMIN"]);
-  const { q, role, status } = await searchParams;
+  const { q, role, status, credit } = await searchParams;
+  const { binPrice } = await getFees();
   const filters: SQL[] = [];
   if (q) filters.push(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`), ilike(users.phone, `%${q}%`))!);
   if (role && (roleEnum.enumValues as readonly string[]).includes(role)) filters.push(eq(users.role, role as Role));
   if (status && (membershipEnum.enumValues as readonly string[]).includes(status))
     filters.push(eq(users.membershipStatus, status as MembershipStatus));
+  if (credit === "empty")
+    filters.push(eq(users.role, "USER"), isNotNull(users.registeredAt), eq(users.membershipStatus, "ACTIVE"), lt(users.creditBalance, binPrice));
 
   const [rows, teamList] = await Promise.all([
     db.query.users.findMany({
@@ -42,7 +46,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     phone: u.phone,
     role: u.role,
     membershipStatus: u.membershipStatus,
-    paidThrough: u.paidThrough?.toISOString() ?? null,
+    creditBalance: u.creditBalance,
+    registered: Boolean(u.registeredAt),
     zone: u.zone?.name ?? null,
     teamIds: u.teams.map((t) => t.teamId),
     isSelf: u.id === me.id,
@@ -67,9 +72,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         <select name="status" defaultValue={status ?? ""} className="field w-auto" aria-label="Membership">
           <option value="">Any membership</option>
           <option value="ACTIVE">Active</option>
-          <option value="OVERDUE">Dues overdue</option>
           <option value="UNREGISTERED">Not registered</option>
           <option value="SUSPENDED">Suspended</option>
+        </select>
+        <select name="credit" defaultValue={credit ?? ""} className="field w-auto" aria-label="Credit">
+          <option value="">Any credit</option>
+          <option value="empty">Out of credit</option>
         </select>
         <button className="btn-dark">Search</button>
       </form>
@@ -79,7 +87,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           <thead className="text-moss">
             <tr className="border-b border-forest-900/10">
               <th className="px-5 py-3 font-semibold">Person</th>
-              <th className="px-5 py-3 font-semibold">Membership</th>
+              <th className="px-5 py-3 font-semibold">Membership & credit</th>
               <th className="px-5 py-3 font-semibold">Role</th>
               <th className="px-5 py-3 font-semibold">Teams</th>
               <th className="px-5 py-3 font-semibold" />

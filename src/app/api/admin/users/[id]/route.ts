@@ -28,11 +28,7 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
   if (input.role) patch.role = input.role;
   if (input.suspended === true) patch.membershipStatus = "SUSPENDED";
   if (input.suspended === false && target.membershipStatus === "SUSPENDED") {
-    patch.membershipStatus = !target.registeredAt
-      ? "UNREGISTERED"
-      : target.paidThrough && target.paidThrough > new Date()
-        ? "ACTIVE"
-        : "OVERDUE";
+    patch.membershipStatus = target.registeredAt ? "ACTIVE" : "UNREGISTERED";
   }
   if (Object.keys(patch).length) await db.update(users).set(patch).where(eq(users.id, id));
 
