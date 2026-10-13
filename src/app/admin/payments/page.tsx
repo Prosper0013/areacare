@@ -56,9 +56,9 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
             <p className="mt-1 text-sm text-moss">{naira(totals.pendingAmount)} awaiting confirmation</p>
           </div>
           <div className="rounded-2xl bg-white p-5 shadow-ring">
-            <dt className="text-sm text-moss">Failed or abandoned</dt>
+            <dt className="text-sm text-moss">Failed or cancelled</dt>
             <dd className="mt-1 font-display text-2xl font-extrabold">{totals.failedCount}</dd>
-            <p className="mt-1 text-sm text-moss">Checkouts that didn't complete</p>
+            <p className="mt-1 text-sm text-moss">Unpaid checkouts close after 3 days</p>
           </div>
         </dl>
         <section className="panel p-5">
@@ -84,6 +84,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
             <option value="SUCCESSFUL">Paid</option>
             <option value="PENDING">Pending</option>
             <option value="FAILED">Failed</option>
+            <option value="CANCELLED">Cancelled (unpaid 3 days)</option>
           </select>
         </div>
         <div>
