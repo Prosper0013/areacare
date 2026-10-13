@@ -7,7 +7,7 @@ export { paymentMethod } from "./format";
 export type PaymentFilters = {
   q?: string; // member name, email, phone or payment reference
   status?: "SUCCESSFUL" | "PENDING" | "FAILED";
-  type?: "REGISTRATION" | "MONTHLY";
+  type?: "REGISTRATION" | "MONTHLY" | "SOAKAWAY";
   from?: string; // yyyy-mm-dd (inclusive)
   to?: string; // yyyy-mm-dd (inclusive)
   page?: number;
@@ -20,7 +20,7 @@ export function parseFilters(sp: Record<string, string | undefined>): PaymentFil
   return {
     q: sp.q?.trim() || undefined,
     status: (["SUCCESSFUL", "PENDING", "FAILED"] as const).find((s) => s === sp.status),
-    type: (["REGISTRATION", "MONTHLY"] as const).find((t) => t === sp.type),
+    type: (["REGISTRATION", "MONTHLY", "SOAKAWAY"] as const).find((t) => t === sp.type),
     from: date(sp.from),
     to: date(sp.to),
     page: Math.max(1, Number(sp.page) || 1),
@@ -78,6 +78,7 @@ export async function listPayments(f: PaymentFilters, opts: { all?: boolean } = 
       pendingAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'PENDING'), 0)`.mapWith(Number),
       failedCount: sql<number>`count(*) filter (where ${payments.status} = 'FAILED')`.mapWith(Number),
       registrationAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'REGISTRATION'), 0)`.mapWith(Number),
+      soakawayAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'SOAKAWAY'), 0)`.mapWith(Number),
       monthlyAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'MONTHLY'), 0)`.mapWith(Number),
     })
     .from(payments)
@@ -108,7 +109,7 @@ export async function revenueByMonth(months = 6) {
     const hit = rows.find((r) => r.month === key);
     return {
       key,
-      label: d.toLocaleDateString("en-NG", { month: "short" }),
+      label: d.toLocaleDateString("en-NG", { month: "short", timeZone: "Africa/Lagos" }),
       total: Number(hit?.total ?? 0),
       count: hit?.n ?? 0,
     };

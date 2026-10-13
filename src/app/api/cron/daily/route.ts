@@ -5,6 +5,9 @@ import { settings, users } from "@/db/schema";
 import { shortDate } from "@/lib/format";
 import { notifyUsers } from "@/lib/notify";
 import { sendConfirmationReminders } from "@/lib/pickups";
+import { remindTodaysEvacuations } from "@/lib/soakaway";
+import { startOfLagosDay } from "@/lib/ops";
+import { coverageFor, monthName } from "@/lib/billing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,8 +44,8 @@ export async function GET(req: Request) {
       lapsed.map((u) => u.id),
       {
         kind: "payment",
-        title: "Your monthly dues are due",
-        body: "Renew your membership to keep requesting pickups.",
+        title: `${monthName(now)} dues are unpaid`,
+        body: `Your Trash filled button is off until you pay for ${monthName(now)}.`,
         link: "/membership",
         email: true,
       },
@@ -59,8 +62,8 @@ export async function GET(req: Request) {
   for (const u of dueSoon) {
     await notifyUsers([u.id], {
       kind: "payment",
-      title: "Dues ending soon",
-      body: `Your membership runs until ${shortDate(u.paidThrough)}. Renew early to avoid interruption.`,
+      title: `Pay for ${monthName(coverageFor(u.paidThrough, 1).start)}`,
+      body: `You're covered until ${shortDate(u.paidThrough)}. Pay for ${monthName(coverageFor(u.paidThrough, 1).start)} before then so your Trash filled button stays on.`,
       link: "/membership",
     });
   }
@@ -68,11 +71,15 @@ export async function GET(req: Request) {
   // 4. Pickup confirmation reminders (also run every 30 min by GitHub Actions)
   const confirmations = await sendConfirmationReminders();
 
+  // 5. Morning reminders for soakaway evacuations scheduled today
+  const evacuationsToday = await remindTodaysEvacuations(startOfLagosDay(now));
+
   return NextResponse.json({
     ok: true,
     at: now.toISOString(),
     overdue: lapsed.length,
     reminded: dueSoon.length,
     confirmations,
+    evacuationsToday,
   });
 }

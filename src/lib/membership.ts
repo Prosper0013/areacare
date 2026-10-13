@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { payments, users, type Payment, type User } from "@/db/schema";
+import { coverageFor } from "./billing";
 
 export function addMonths(date: Date, months: number) {
   const d = new Date(date);
@@ -38,7 +39,8 @@ export function daysLeft(user: User) {
 /**
  * Marks a verified payment as successful and extends the member's paid-through date.
  * Idempotent: calling it twice for the same payment has no extra effect.
- * The registration fee activates membership and covers the first month.
+ * Billing is by calendar month (see lib/billing.ts): registration covers the current
+ * month, and each monthly payment adds the following month(s).
  */
 export async function applySuccessfulPayment(paymentId: string, flwTransactionId: string) {
   return db.transaction(async (tx) => {
@@ -46,12 +48,21 @@ export async function applySuccessfulPayment(paymentId: string, flwTransactionId
     if (!payment) throw new Error("Payment not found");
     if (payment.status === "SUCCESSFUL") return { payment, alreadyApplied: true };
 
+    // Soakaway payments pay for a booking; they don't touch membership dates.
+    if (payment.type === "SOAKAWAY") {
+      const [updated] = await tx
+        .update(payments)
+        .set({ status: "SUCCESSFUL", flwTransactionId, verifiedAt: new Date() })
+        .where(eq(payments.id, payment.id))
+        .returning();
+      return { payment: updated as Payment, alreadyApplied: false };
+    }
+
     const [user] = await tx.select().from(users).where(eq(users.id, payment.userId)).for("update");
     if (!user) throw new Error("User not found");
 
     const now = new Date();
-    const start = user.paidThrough && user.paidThrough > now ? user.paidThrough : now;
-    const end = addMonths(start, payment.months);
+    const { start, end } = coverageFor(user.paidThrough, payment.months, now);
 
     await tx
       .update(users)

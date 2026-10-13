@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, PageTitle } from "@/components/shell/AppShell";
 import { TeamsManager } from "@/components/admin/TeamsManager";
 
-export const metadata = { title: "Teams & zones" };
+export const metadata = { title: "Teams & areas" };
 export const dynamic = "force-dynamic";
 
 export default async function TeamsPage() {
@@ -26,8 +26,8 @@ export default async function TeamsPage() {
   return (
     <AppShell user={user}>
       <PageTitle
-        title="Teams & zones"
-        subtitle="A team gets alerts for the zones it covers. Management always gets every alert."
+        title="Teams & areas"
+        subtitle="Add the areas you serve, and choose which team covers each one. Management always gets every alert."
       />
       <TeamsManager
         teams={teamRows.map((t) => ({

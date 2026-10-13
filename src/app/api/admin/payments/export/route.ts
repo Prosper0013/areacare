@@ -36,7 +36,7 @@ export const GET = handler(async (req: Request) => {
       p.user.name,
       p.user.email,
       p.user.phone,
-      p.type === "REGISTRATION" ? "Registration" : "Monthly dues",
+      p.type === "REGISTRATION" ? "Registration" : p.type === "SOAKAWAY" ? "Soakaway evacuation" : "Monthly dues",
       p.months,
       p.amount,
       p.status,

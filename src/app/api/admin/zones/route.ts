@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { zones } from "@/db/schema";
@@ -18,5 +19,6 @@ export const POST = handler(async (req: Request) => {
     .onConflictDoNothing()
     .returning();
   if (!zone) throw new HttpError(409, "A zone with that name already exists.");
+  revalidatePath("/"); // the home page lists the areas
   return ok({ zone }, { status: 201 });
 });

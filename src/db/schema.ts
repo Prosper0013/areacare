@@ -27,7 +27,7 @@ export const membershipEnum = pgEnum("membership_status", [
   "OVERDUE",
   "SUSPENDED",
 ]);
-export const paymentTypeEnum = pgEnum("payment_type", ["REGISTRATION", "MONTHLY"]);
+export const paymentTypeEnum = pgEnum("payment_type", ["REGISTRATION", "MONTHLY", "SOAKAWAY"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["PENDING", "SUCCESSFUL", "FAILED"]);
 export const pickupStatusEnum = pgEnum("pickup_status", [
   "PENDING", // raised by the member
@@ -38,7 +38,17 @@ export const pickupStatusEnum = pgEnum("pickup_status", [
   "CANCELLED",
 ]);
 
+export const soakawayStatusEnum = pgEnum("soakaway_status", [
+  "AWAITING_PAYMENT", // booked, not paid yet
+  "PENDING_APPROVAL", // paid, waiting for an admin to approve and schedule
+  "SCHEDULED", // approved with a date and time
+  "COMPLETED",
+  "REJECTED", // declined by an admin (refund handled offline)
+  "CANCELLED", // member cancelled before paying
+]);
+
 export type Role = (typeof roleEnum.enumValues)[number];
+export type SoakawayStatus = (typeof soakawayStatusEnum.enumValues)[number];
 export type MembershipStatus = (typeof membershipEnum.enumValues)[number];
 export type PickupStatus = (typeof pickupStatusEnum.enumValues)[number];
 export type PaymentType = (typeof paymentTypeEnum.enumValues)[number];
@@ -179,6 +189,40 @@ export const pickups = pgTable(
   ],
 );
 
+export const soakawayBookings = pgTable(
+  "soakaway_bookings",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: soakawayStatusEnum("status").default("AWAITING_PAYMENT").notNull(),
+    amount: integer("amount").notNull(), // naira, fixed at booking time
+    preferredDate: text("preferred_date"), // yyyy-mm-dd
+    preferredTime: text("preferred_time"), // morning | afternoon | any
+    note: text("note"),
+    address: jsonb("address").$type<AddressSnapshot>().notNull(),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    zoneId: text("zone_id").references(() => zones.id, { onDelete: "set null" }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    adminNote: text("admin_note"),
+    approvedById: text("approved_by_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectReason: text("reject_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("soakaway_status_idx").on(t.status, t.createdAt),
+    index("soakaway_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
 export const payments = pgTable(
   "payments",
   {
@@ -189,6 +233,7 @@ export const payments = pgTable(
     txRef: text("tx_ref").notNull().unique(),
     flwTransactionId: text("flw_transaction_id"),
     type: paymentTypeEnum("type").notNull(),
+    bookingId: text("booking_id").references(() => soakawayBookings.id, { onDelete: "set null" }),
     amount: integer("amount").notNull(), // naira
     currency: text("currency").default("NGN").notNull(),
     months: integer("months").default(1).notNull(),
@@ -277,6 +322,14 @@ export const pickupsRelations = relations(pickups, ({ one }) => ({
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
   user: one(users, { fields: [payments.userId], references: [users.id] }),
+  booking: one(soakawayBookings, { fields: [payments.bookingId], references: [soakawayBookings.id] }),
+}));
+
+export const soakawayRelations = relations(soakawayBookings, ({ one, many }) => ({
+  user: one(users, { fields: [soakawayBookings.userId], references: [users.id], relationName: "booker" }),
+  approvedBy: one(users, { fields: [soakawayBookings.approvedById], references: [users.id], relationName: "approver" }),
+  zone: one(zones, { fields: [soakawayBookings.zoneId], references: [zones.id] }),
+  payments: many(payments),
 }));
 
 export type User = typeof users.$inferSelect;
@@ -285,3 +338,4 @@ export type Payment = typeof payments.$inferSelect;
 export type Zone = typeof zones.$inferSelect;
 export type Team = typeof teams.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type SoakawayBooking = typeof soakawayBookings.$inferSelect;

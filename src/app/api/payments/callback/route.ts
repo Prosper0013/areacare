@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { payments } from "@/db/schema";
 import { confirmPayment } from "@/lib/payments";
 
 // Flutterwave redirects the payer here: ?status=successful&tx_ref=...&transaction_id=...
@@ -7,7 +10,8 @@ export async function GET(req: Request) {
   const txRef = url.searchParams.get("tx_ref");
   const transactionId = url.searchParams.get("transaction_id");
   const flwStatus = url.searchParams.get("status");
-  const back = new URL("/membership", req.url);
+  const payment = txRef ? await db.query.payments.findFirst({ where: eq(payments.txRef, txRef) }) : null;
+  const back = new URL(payment?.type === "SOAKAWAY" ? "/soakaway" : "/membership", req.url);
 
   if (!txRef) {
     back.searchParams.set("payment", "failed");

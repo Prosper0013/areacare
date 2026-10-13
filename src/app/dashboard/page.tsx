@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
+import { coverageFor, monthName, periodLabel } from "@/lib/billing";
 import Link from "next/link";
-import { and, count, desc, eq, gte } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { payments, pickups } from "@/db/schema";
+import { payments, pickups, soakawayBookings } from "@/db/schema";
+import { getFees } from "@/lib/settings";
+import { Truck } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canRequestPickup, daysLeft, hasHouseDetails } from "@/lib/membership";
-import { addressLine, naira, shortDate } from "@/lib/format";
+import { addressLine, appointment, naira, shortDate } from "@/lib/format";
 import { memberPaymentSummary } from "@/lib/payment-stats";
 import { PaymentChip } from "@/components/payments/PaymentChip";
 import { paymentLabel } from "@/components/payments/PaymentsTable";
@@ -26,7 +29,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [open, last, [{ thisMonth }], recentPayments, paySummary] = await Promise.all([
+  const [open, last, [{ thisMonth }], recentPayments, paySummary, nextEvacuation, fees] = await Promise.all([
     openPickupFor(user.id),
     db.query.pickups.findFirst({
       where: and(eq(pickups.userId, user.id), eq(pickups.status, "COMPLETED")),
@@ -38,6 +41,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       .where(and(eq(pickups.userId, user.id), gte(pickups.createdAt, monthStart))),
     db.query.payments.findMany({ where: eq(payments.userId, user.id), orderBy: desc(payments.createdAt), limit: 4 }),
     memberPaymentSummary(user.id),
+    db.query.soakawayBookings.findFirst({
+      where: and(
+        eq(soakawayBookings.userId, user.id),
+        inArray(soakawayBookings.status, ["AWAITING_PAYMENT", "PENDING_APPROVAL", "SCHEDULED"]),
+      ),
+      orderBy: desc(soakawayBookings.createdAt),
+    }),
+    getFees(),
   ]);
 
   // Keep showing a just-finished pickup as "cleared · confirmed" for a day.
@@ -70,6 +81,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <TrashFilledPanel
         canRequest={allowed}
         lockedReason={lockedReason}
+        payMonth={monthName(coverageFor(user.paidThrough, 1).start)}
         address={addressLine(user)}
         landmark={user.landmark}
         hasHomePin={user.homeLat != null}
@@ -83,7 +95,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <div className="rounded-2xl bg-white p-5 shadow-ring">
           <dt className="text-sm text-moss">Membership</dt>
           <dd className="mt-1 font-display text-2xl font-bold">
-            {user.registeredAt ? (allowed ? `${left} days left` : "Dues overdue") : "Not registered"}
+            {user.registeredAt ? (allowed ? `Paid for ${monthName(user.paidThrough!)}` : "Dues overdue") : "Not registered"}
           </dd>
           <Link href="/membership" className="mt-2 inline-block text-sm font-semibold text-forest-600 hover:underline">
             {user.registeredAt ? "Pay dues" : "Register"}
@@ -101,6 +113,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <dd className="mt-1 font-display text-2xl font-bold">{last ? shortDate(last.completedAt) : "None yet"}</dd>
         </div>
       </dl>
+
+      <section className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl bg-forest-900 p-5 text-white">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-vest-500 text-forest-900">
+          <Truck size={24} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-lg font-bold">Soakaway evacuation</p>
+          <p className="text-sm text-white/70">
+            {nextEvacuation
+              ? nextEvacuation.status === "SCHEDULED"
+                ? `Booked for ${appointment(nextEvacuation.scheduledFor)}`
+                : nextEvacuation.status === "PENDING_APPROVAL"
+                  ? "Paid · waiting for AreaCare to confirm the date and time"
+                  : "Booked · payment not completed"
+              : `Book a truck to empty your soakaway · ${naira(fees.soakawayFee)}`}
+          </p>
+        </div>
+        <Link href="/soakaway" className="btn-vest btn-sm">
+          {nextEvacuation ? "View booking" : "Book now"}
+        </Link>
+      </section>
 
       <section className="panel mt-6 overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-forest-900/5 px-5 py-4">
@@ -135,7 +168,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                     <p className="font-semibold">{paymentLabel(p)}</p>
                     <p className="text-sm text-moss">
                       {shortDate(p.verifiedAt ?? p.createdAt)}
-                      {p.periodEnd ? ` · covers to ${shortDate(p.periodEnd)}` : ""}
+                      {p.periodEnd ? ` · ${periodLabel(p.periodStart, p.periodEnd)}` : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

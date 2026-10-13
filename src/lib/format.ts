@@ -1,10 +1,26 @@
 import type { AddressSnapshot, PickupStatus } from "@/db/schema";
 
+/** All dates are shown in Lagos time, whatever timezone the server runs in. */
+export const TZ = "Africa/Lagos";
+
+/** e.g. "Thursday 16 October, 10:00 am" */
+export const appointment = (d: Date | string | null | undefined) =>
+  d
+    ? new Intl.DateTimeFormat("en-NG", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: TZ,
+      }).format(new Date(d))
+    : "—";
+
 export const naira = (amount: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(amount);
 
 export const shortDate = (d: Date | string | null | undefined) =>
-  d ? new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d)) : "—";
+  d ? new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "short", year: "numeric", timeZone: TZ }).format(new Date(d)) : "—";
 
 export const dateTime = (d: Date | string | null | undefined) =>
   d
@@ -13,6 +29,7 @@ export const dateTime = (d: Date | string | null | undefined) =>
         month: "short",
         hour: "numeric",
         minute: "2-digit",
+        timeZone: TZ,
       }).format(new Date(d))
     : "—";
 
@@ -24,6 +41,7 @@ export const fullDateTime = (d: Date | string | null | undefined) =>
         year: "numeric",
         hour: "numeric",
         minute: "2-digit",
+        timeZone: TZ,
       }).format(new Date(d))
     : "—";
 

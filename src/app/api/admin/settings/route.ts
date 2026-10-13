@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { apiUser } from "@/lib/auth";
 import { handler, ok } from "@/lib/api";
@@ -14,8 +15,10 @@ export const PUT = handler(async (req: Request) => {
     .object({
       registrationFee: z.number().int().min(100, "Registration fee must be at least ₦100.").max(10_000_000),
       monthlyFee: z.number().int().min(100, "Monthly fee must be at least ₦100.").max(10_000_000),
+      soakawayFee: z.number().int().min(100, "Soakaway evacuation must cost at least ₦100.").max(10_000_000).optional(),
     })
     .parse(await req.json());
   await setFees(fees);
+  revalidatePath("/"); // the home page shows the prices
   return ok(fees);
 });

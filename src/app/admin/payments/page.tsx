@@ -47,7 +47,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
             <dd className="mt-1 font-display text-4xl font-extrabold">{naira(totals.paidAmount)}</dd>
             <p className="mt-1 text-sm text-white/70">
               {totals.paidCount} payment{totals.paidCount === 1 ? "" : "s"} · {naira(totals.registrationAmount)} registration ·{" "}
-              {naira(totals.monthlyAmount)} dues
+              {naira(totals.monthlyAmount)} dues · {naira(totals.soakawayAmount)} soakaway
             </p>
           </div>
           <div className="rounded-2xl bg-white p-5 shadow-ring">
@@ -93,6 +93,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
           <select id="type" name="type" defaultValue={f.type ?? ""} className="field py-2.5">
             <option value="">Any</option>
             <option value="REGISTRATION">Registration</option>
+            <option value="SOAKAWAY">Soakaway evacuation</option>
             <option value="MONTHLY">Monthly dues</option>
           </select>
         </div>

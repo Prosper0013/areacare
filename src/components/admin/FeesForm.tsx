@@ -5,9 +5,10 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/client";
 
-export function FeesForm({ initial }: { initial: { registrationFee: number; monthlyFee: number } }) {
+export function FeesForm({ initial }: { initial: { registrationFee: number; monthlyFee: number; soakawayFee: number } }) {
   const [reg, setReg] = useState(String(initial.registrationFee));
   const [monthly, setMonthly] = useState(String(initial.monthlyFee));
+  const [soak, setSoak] = useState(String(initial.soakawayFee));
   const [busy, setBusy] = useState(false);
 
   async function save(e: React.FormEvent) {
@@ -16,9 +17,13 @@ export function FeesForm({ initial }: { initial: { registrationFee: number; mont
     try {
       await api("/api/admin/settings", {
         method: "PUT",
-        body: { registrationFee: Math.round(Number(reg)), monthlyFee: Math.round(Number(monthly)) },
+        body: {
+          registrationFee: Math.round(Number(reg)),
+          monthlyFee: Math.round(Number(monthly)),
+          soakawayFee: Math.round(Number(soak)),
+        },
       });
-      toast.success("Fees updated");
+      toast.success("Prices updated");
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -29,8 +34,9 @@ export function FeesForm({ initial }: { initial: { registrationFee: number; mont
   return (
     <form onSubmit={save} className="panel max-w-xl space-y-6 p-6 sm:p-8">
       {[
-        ["registrationFee", "Registration fee (one time)", reg, setReg, "Activates a home and covers its first month."],
-        ["monthlyFee", "Monthly dues", monthly, setMonthly, "Charged per month of membership."],
+        ["registrationFee", "Registration fee (one time)", reg, setReg, "Activates a home and covers the month they join."],
+        ["monthlyFee", "Monthly dues", monthly, setMonthly, "Charged per calendar month of membership."],
+        ["soakawayFee", "Soakaway evacuation", soak, setSoak, "Price per evacuation. Applies to new bookings."],
       ].map(([id, label, value, set, hint]) => (
         <div key={id as string}>
           <label htmlFor={id as string} className="label">

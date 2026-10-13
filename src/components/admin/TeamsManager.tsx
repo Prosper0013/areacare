@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, MapPinned, Plus, Trash2, Users } from "lucide-react";
+import { Check, Loader2, MapPinned, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import clsx from "clsx";
 import { api } from "@/lib/client";
@@ -74,13 +74,13 @@ export function TeamsManager({ teams, zones, staff }: { teams: Team[]; zones: Zo
               </div>
 
               <p className="mb-2 mt-5 flex items-center gap-2 text-sm font-semibold">
-                <MapPinned size={16} className="text-forest-600" /> Zones covered
+                <MapPinned size={16} className="text-forest-600" /> Areas covered
               </p>
               <ChipSet
                 options={zones.map((z) => ({ id: z.id, label: z.name }))}
                 selected={t.zoneIds}
                 onToggle={(id) => toggle(t, "zoneIds", id)}
-                empty="Add a zone first"
+                empty="Add an area first"
               />
 
               <p className="mb-2 mt-5 flex items-center gap-2 text-sm font-semibold">
@@ -98,44 +98,37 @@ export function TeamsManager({ teams, zones, staff }: { teams: Team[]; zones: Zo
         {teams.length === 0 && <p className="panel p-8 text-center text-moss">No teams yet. Create one above.</p>}
       </div>
 
-      {/* Zones */}
+      {/* Areas */}
       <div>
         <section className="panel sticky top-24 p-6">
-          <h2 className="text-xl font-bold">Zones</h2>
-          <p className="mb-4 text-sm text-moss">Members pick one of these when they add their house.</p>
-          <CreateForm
-            label="New zone"
-            placeholder="e.g. Lokogoma"
-            compact
+          <h2 className="text-xl font-bold">Areas covered</h2>
+          <p className="mb-4 text-sm text-moss">
+            Members pick one when they add their house. List the neighbourhoods in each area so
+            &ldquo;Use my current location&rdquo; can choose it for them.
+          </p>
+          <AreaForm
             busy={busy === "new-zone"}
-            onCreate={(name, description) =>
+            submitLabel="Add area"
+            onSubmit={(name, description) =>
               run("new-zone", () => api("/api/admin/zones", { body: { name, description } }), `${name} added`)
             }
           />
           <ul className="mt-4 divide-y divide-forest-900/5">
-            {zones.map((z) => {
-              const covered = teams.some((t) => t.zoneIds.includes(z.id));
-              return (
-                <li key={z.id} className="flex items-center justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{z.name}</p>
-                    <p className={clsx("text-xs", covered ? "text-moss" : "font-semibold text-ember-600")}>
-                      {covered ? z.description || "Covered" : "No team covers this zone"}
-                    </p>
-                  </div>
-                  <button
-                    className="rounded-lg p-2 text-moss hover:bg-ember-100 hover:text-ember-600"
-                    aria-label={`Delete ${z.name}`}
-                    onClick={() =>
-                      confirm(`Delete ${z.name}? Members in this zone will need to pick a new one.`) &&
-                      run(z.id, () => api(`/api/admin/zones/${z.id}`, { method: "DELETE" }), "Zone deleted")
-                    }
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </li>
-              );
-            })}
+            {zones.map((z) => (
+              <AreaRow
+                key={z.id}
+                zone={z}
+                covered={teams.some((t) => t.zoneIds.includes(z.id))}
+                busy={busy === z.id}
+                onSave={(name, description) =>
+                  run(z.id, () => api(`/api/admin/zones/${z.id}`, { method: "PATCH", body: { name, description } }), `${name} updated`)
+                }
+                onDelete={() =>
+                  confirm(`Delete ${z.name}? Members in this area will need to pick a new one.`) &&
+                  run(z.id, () => api(`/api/admin/zones/${z.id}`, { method: "DELETE" }), "Area deleted")
+                }
+              />
+            ))}
           </ul>
         </section>
       </div>
@@ -218,5 +211,105 @@ function CreateForm({
         {compact ? "Add" : "Create team"}
       </button>
     </form>
+  );
+}
+
+function AreaForm({
+  initial,
+  busy,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  initial?: { name: string; description: string | null };
+  busy: boolean;
+  submitLabel: string;
+  onSubmit: (name: string, description: string) => void;
+  onCancel?: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        onSubmit(name.trim(), description.trim());
+        if (!initial) {
+          setName("");
+          setDescription("");
+        }
+      }}
+      className="space-y-2"
+    >
+      <input aria-label="Area name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Area name, e.g. Lokogoma" className="field py-2.5" />
+      <input
+        aria-label="Neighbourhoods in this area"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Neighbourhoods, comma-separated (e.g. Lokogoma, Galadimawa)"
+        className="field py-2.5 text-sm"
+      />
+      <div className="flex gap-2">
+        <button className="btn-dark btn-sm" disabled={busy || !name.trim()}>
+          {busy ? <Loader2 size={15} className="animate-spin" /> : initial ? <Check size={15} /> : <Plus size={15} />}
+          {submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="btn-ghost btn-sm">
+            Cancel
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function AreaRow({
+  zone,
+  covered,
+  busy,
+  onSave,
+  onDelete,
+}: {
+  zone: Zone;
+  covered: boolean;
+  busy: boolean;
+  onSave: (name: string, description: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    return (
+      <li className="py-3">
+        <AreaForm
+          initial={zone}
+          busy={busy}
+          submitLabel="Save"
+          onSubmit={(n, d) => {
+            onSave(n, d);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </li>
+    );
+  }
+  return (
+    <li className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="font-semibold">{zone.name}</p>
+        {zone.description && <p className="truncate text-xs text-moss">{zone.description}</p>}
+        {!covered && <p className="text-xs font-semibold text-ember-600">No team covers this area</p>}
+      </div>
+      <div className="flex shrink-0">
+        <button className="rounded-lg p-2 text-moss hover:bg-forest-50 hover:text-forest-900" aria-label={`Edit ${zone.name}`} onClick={() => setEditing(true)}>
+          <Pencil size={16} />
+        </button>
+        <button className="rounded-lg p-2 text-moss hover:bg-ember-100 hover:text-ember-600" aria-label={`Delete ${zone.name}`} onClick={onDelete}>
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </li>
   );
 }

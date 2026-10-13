@@ -12,8 +12,8 @@ export default async function SettingsPage() {
   return (
     <AppShell user={user}>
       <PageTitle
-        title="Membership fees"
-        subtitle="New prices apply to the next payment each member makes. Existing paid months aren't affected."
+        title="Prices"
+        subtitle="New prices apply to the next payment or booking. Months already paid and existing bookings keep their price."
       />
       <FeesForm initial={fees} />
     </AppShell>

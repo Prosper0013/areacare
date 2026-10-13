@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, between, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
 import { db } from "@/db";
-import { payments, pickups, users } from "@/db/schema";
+import { payments, pickups, soakawayBookings, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { OPEN_STATUSES } from "@/lib/pickups";
 import { startOfLagosDay } from "@/lib/ops";
@@ -23,11 +23,12 @@ export default async function AdminHome() {
 
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
-  const [[{ clearedToday }]] = await Promise.all([
+  const [[{ clearedToday }], [{ soakToApprove }]] = await Promise.all([
     db
       .select({ clearedToday: count() })
       .from(pickups)
       .where(and(eq(pickups.status, "COMPLETED"), gte(pickups.completedAt, startOfLagosDay()))),
+    db.select({ soakToApprove: count() }).from(soakawayBookings).where(eq(soakawayBookings.status, "PENDING_APPROVAL")),
   ]);
   const [memberCounts, [{ open, awaiting, reopened }], [{ revenue }], daily, recentPayments, months, dueSoon, overdue] = await Promise.all([
     db
@@ -80,7 +81,7 @@ export default async function AdminHome() {
   const days = Array.from({ length: 14 }, (_, i) => {
     const d = new Date(since.getTime() + i * 86_400_000);
     const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" }).format(d);
-    return { key, label: d.toLocaleDateString("en-NG", { weekday: "narrow" }), n: daily.find((x) => x.day === key)?.n ?? 0 };
+    return { key, label: d.toLocaleDateString("en-NG", { weekday: "narrow", timeZone: "Africa/Lagos" }), n: daily.find((x) => x.day === key)?.n ?? 0 };
   });
   const max = Math.max(1, ...days.map((d) => d.n));
 
@@ -88,7 +89,7 @@ export default async function AdminHome() {
     <AppShell user={user}>
       <PageTitle title="Overview" subtitle="How AreaCare is running today." />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Link href="/ops" className="rounded-2xl bg-forest-900 p-5 text-white transition hover:bg-forest-800">
           <p className="text-sm text-white/70">Open requests</p>
           <p className="mt-1 font-display text-4xl font-extrabold">{open}</p>
@@ -97,6 +98,11 @@ export default async function AdminHome() {
             {reopened ? ` · ${reopened} sent back` : ""}
           </p>
           <p className="mt-1 text-sm font-semibold text-vest-400">Go to live board</p>
+        </Link>
+        <Link href="/ops/soakaway" className={soakToApprove ? "rounded-2xl bg-vest-500 p-5 text-forest-900 transition hover:bg-vest-400" : "rounded-2xl bg-white p-5 shadow-ring transition hover:shadow-lift"}>
+          <p className="text-sm opacity-80">Soakaway to approve</p>
+          <p className="mt-1 font-display text-4xl font-extrabold">{soakToApprove}</p>
+          <p className="mt-2 text-sm font-semibold">{soakToApprove ? "Approve and schedule" : "See bookings"}</p>
         </Link>
         <Kpi label="Cleared & confirmed today" value={clearedToday} hint={`${byStatus.ACTIVE ?? 0} active members`} />
         <Kpi label="Dues overdue" value={byStatus.OVERDUE ?? 0} hint={`${byStatus.UNREGISTERED ?? 0} not yet registered`} />
@@ -138,7 +144,7 @@ export default async function AdminHome() {
                       {p.user.name}
                     </Link>
                     <p className="text-xs text-moss">
-                      {p.type === "REGISTRATION" ? "Registration" : `Dues × ${p.months}`} · {dateTime(p.verifiedAt)}
+                      {p.type === "REGISTRATION" ? "Registration" : p.type === "SOAKAWAY" ? "Soakaway" : `Dues × ${p.months}`} · {dateTime(p.verifiedAt)}
                     </p>
                   </div>
                   <span className="font-display font-bold">{naira(p.amount)}</span>

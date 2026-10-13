@@ -13,6 +13,7 @@ import {
   Home,
   Map,
   Settings2,
+  Truck,
   Users,
   UsersRound,
   type LucideIcon,
@@ -26,8 +27,9 @@ export function navFor(role: Role): Item[] {
     return [
       { href: "/dashboard", label: "Home", icon: Home, exact: true },
       { href: "/dashboard/history", label: "Pickups", icon: ClipboardList },
-      { href: "/membership", label: "Membership", icon: BadgeCheck },
+      { href: "/soakaway", label: "Soakaway", icon: Truck },
       { href: "/payments", label: "Payments", icon: CreditCard },
+      { href: "/membership", label: "Membership", icon: BadgeCheck },
       { href: "/notifications", label: "Alerts", icon: Bell },
     ];
   const ops: Item[] = [
@@ -38,11 +40,13 @@ export function navFor(role: Role): Item[] {
     return [
       { href: "/admin", label: "Overview", icon: Gauge, exact: true },
       ...ops,
+      { href: "/ops/soakaway", label: "Soakaway", icon: Truck },
       { href: "/admin/payments", label: "Payments", icon: CreditCard },
       { href: "/admin/users", label: "People", icon: Users },
-      { href: "/admin/teams", label: "Teams & zones", icon: UsersRound },
-      { href: "/admin/settings", label: "Fees", icon: Settings2 },
+      { href: "/admin/teams", label: "Teams & areas", icon: UsersRound },
+      { href: "/admin/settings", label: "Prices", icon: Settings2 },
     ];
+  if (role === "ADMIN") return [...ops, { href: "/ops/soakaway", label: "Soakaway", icon: Truck }, { href: "/notifications", label: "Alerts", icon: Bell }];
   return [...ops, { href: "/notifications", label: "Alerts", icon: Bell }];
 }
 

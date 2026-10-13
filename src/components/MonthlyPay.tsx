@@ -3,12 +3,16 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { naira } from "@/lib/format";
+import { coverageFor, periodLabel } from "@/lib/billing";
 import { PayButton } from "./PayButton";
 
 const OPTIONS = [1, 3, 6, 12];
 
-export function MonthlyPay({ monthlyFee }: { monthlyFee: number }) {
+export function MonthlyPay({ monthlyFee, paidThrough }: { monthlyFee: number; paidThrough: string | null }) {
   const [months, setMonths] = useState(1);
+  const through = paidThrough ? new Date(paidThrough) : null;
+  const cover = coverageFor(through, months);
+
   return (
     <div>
       <p className="label">How many months?</p>
@@ -29,9 +33,15 @@ export function MonthlyPay({ monthlyFee }: { monthlyFee: number }) {
           </button>
         ))}
       </div>
-      <div className="mt-5 flex items-center justify-between border-t border-forest-900/10 pt-4">
-        <span className="text-moss">Total</span>
-        <span className="font-display text-3xl font-bold">{naira(monthlyFee * months)}</span>
+      <div className="mt-5 space-y-2 border-t border-forest-900/10 pt-4">
+        <div className="flex items-center justify-between">
+          <span className="text-moss">Covers</span>
+          <span className="font-semibold">{periodLabel(cover.start, cover.end)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-moss">Total</span>
+          <span className="font-display text-3xl font-bold">{naira(monthlyFee * months)}</span>
+        </div>
       </div>
       <PayButton type="MONTHLY" months={months} label={`Pay ${naira(monthlyFee * months)}`} className="mt-4 w-full py-3.5" />
     </div>

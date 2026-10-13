@@ -6,6 +6,7 @@ import { isGenuine, verifyByReference, verifyTransaction } from "./flutterwave";
 import { applySuccessfulPayment } from "./membership";
 import { naira, shortDate } from "./format";
 import { notifyUsers } from "./notify";
+import { onBookingPaid } from "./soakaway";
 
 /**
  * Confirms a payment with Flutterwave and applies it. Called from both the redirect
@@ -27,7 +28,9 @@ export async function confirmPayment(txRef: string, transactionId?: string | num
   }
 
   const { payment: applied, alreadyApplied } = await applySuccessfulPayment(payment.id, String(tx!.id));
-  if (!alreadyApplied) {
+  if (!alreadyApplied && applied.type === "SOAKAWAY") {
+    if (applied.bookingId) await onBookingPaid(applied.bookingId);
+  } else if (!alreadyApplied) {
     await notifyUsers([payment.userId], {
       kind: "payment",
       title: payment.type === "REGISTRATION" ? "Welcome to AreaCare" : "Payment received",

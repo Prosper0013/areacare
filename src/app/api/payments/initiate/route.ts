@@ -6,6 +6,7 @@ import { handler, ok } from "@/lib/api";
 import { createCheckout } from "@/lib/flutterwave";
 import { hasHouseDetails } from "@/lib/membership";
 import { getFees } from "@/lib/settings";
+import { coverageFor, periodLabel } from "@/lib/billing";
 
 const schema = z.object({
   type: z.enum(["REGISTRATION", "MONTHLY"]),
@@ -39,8 +40,11 @@ export const POST = handler(async (req: Request) => {
     title: "AreaCare",
     description:
       input.type === "REGISTRATION"
-        ? "Membership registration (includes your first month)"
-        : `Monthly dues × ${months}`,
+        ? `Membership registration (covers ${periodLabel(coverageFor(null, 1).start, coverageFor(null, 1).end)})`
+        : `Monthly dues for ${(() => {
+            const c = coverageFor(user.paidThrough, months);
+            return periodLabel(c.start, c.end);
+          })()}`,
     meta: { userId: user.id, type: input.type },
   });
 

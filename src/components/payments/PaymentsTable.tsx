@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { periodLabel } from "@/lib/billing";
 import { FileText } from "lucide-react";
 import type { Payment } from "@/db/schema";
 import { dateTime, isManualPayment, naira, shortDate } from "@/lib/format";
@@ -11,6 +12,7 @@ export type PaymentRow = Pick<
 > & { user?: { id: string; name: string; email: string } };
 
 export function paymentLabel(p: Pick<Payment, "type" | "months">) {
+  if (p.type === "SOAKAWAY") return "Soakaway evacuation";
   return p.type === "REGISTRATION" ? "Registration" : `Monthly dues × ${p.months}`;
 }
 
@@ -49,7 +51,7 @@ export function PaymentsTable({
                 </p>
                 <p className="text-xs text-moss">
                   {dateTime(p.verifiedAt ?? p.createdAt)}
-                  {p.periodEnd ? ` · to ${shortDate(p.periodEnd)}` : ""}
+                  {p.periodEnd ? ` · ${periodLabel(p.periodStart, p.periodEnd)}` : ""}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-[11px] text-moss">{p.txRef}</p>
               </div>
@@ -109,7 +111,7 @@ export function PaymentsTable({
                 {isManualPayment(p) && <span className="mt-0.5 block text-xs text-moss">Cash / transfer</span>}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-moss">
-                {p.periodStart && p.periodEnd ? `${shortDate(p.periodStart)} – ${shortDate(p.periodEnd)}` : "—"}
+                {periodLabel(p.periodStart, p.periodEnd)}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right font-display text-base font-bold">{naira(p.amount)}</td>
               <td className="whitespace-nowrap px-4 py-3">

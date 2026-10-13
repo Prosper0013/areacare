@@ -17,6 +17,7 @@ type OpenPickup = TimelinePickup & { id: string; locationSource: string; cleared
 export function TrashFilledPanel({
   canRequest,
   lockedReason,
+  payMonth,
   address,
   landmark,
   hasHomePin,
@@ -25,6 +26,7 @@ export function TrashFilledPanel({
 }: {
   canRequest: boolean;
   lockedReason: "register" | "renew" | "suspended" | null;
+  payMonth?: string;
   address: string;
   landmark: string | null;
   hasHomePin: boolean;
@@ -141,7 +143,7 @@ export function TrashFilledPanel({
 
           <div className="mt-6 flex justify-center">
             {!canRequest ? (
-              <LockedCta reason={lockedReason} />
+              <LockedCta reason={lockedReason} payMonth={payMonth} />
             ) : active ? (
               <span className={awaiting ? "chip bg-vest-500 px-4 py-2 text-sm text-forest-900" : "chip bg-forest-900 px-4 py-2 text-sm text-white"}>
                 {awaiting ? "Cleared? Please confirm" : PICKUP_STATUS_LABEL[pickup!.status]}
@@ -280,22 +282,36 @@ export function TrashFilledPanel({
   );
 }
 
-function LockedCta({ reason }: { reason: "register" | "renew" | "suspended" | null }) {
+function LockedCta({ reason, payMonth }: { reason: "register" | "renew" | "suspended" | null; payMonth?: string }) {
   const text =
     reason === "renew"
-      ? "Renew your monthly dues to request pickups."
+      ? `Your button is off because ${payMonth ?? "this month"} isn't paid yet.`
       : reason === "suspended"
-        ? "Your account is suspended. Contact support."
-        : "Complete registration to request pickups.";
+        ? "Your account is suspended. Contact AreaCare support."
+        : "Your button turns on once your home is registered.";
   return (
     <div className="flex flex-col items-center gap-3 text-center">
-      <span className="grid h-32 w-32 place-items-center rounded-full bg-forest-900/5 text-moss">
-        <Lock size={34} />
-      </span>
-      <p className="max-w-xs text-sm text-moss">{text}</p>
+      <button
+        type="button"
+        disabled
+        aria-disabled="true"
+        aria-label="Trash filled (inactive)"
+        className="relative grid h-40 w-40 cursor-not-allowed place-items-center rounded-full bg-forest-900/10 text-forest-900/35 sm:h-44 sm:w-44"
+      >
+        <span className="absolute inset-3 rounded-full border-2 border-dashed border-forest-900/15" aria-hidden />
+        <span className="relative font-display text-[26px] font-extrabold leading-[1.05]">
+          Trash
+          <br />
+          filled
+        </span>
+        <span className="absolute -right-1 top-3 grid h-11 w-11 place-items-center rounded-full bg-forest-900 text-white shadow-lift">
+          <Lock size={18} />
+        </span>
+      </button>
+      <p className="max-w-xs text-sm font-medium text-forest-900">{text}</p>
       {reason !== "suspended" && (
-        <Link href="/membership" className="btn-primary btn-sm">
-          {reason === "renew" ? "Renew membership" : "Register now"}
+        <Link href="/membership" className="btn-vest btn-sm">
+          {reason === "renew" ? `Pay for ${payMonth ?? "this month"}` : "Register now"}
         </Link>
       )}
     </div>
