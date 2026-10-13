@@ -10,7 +10,7 @@
 -- ════════════════════════════════════════════════════════════════════
 
 CREATE TYPE "public"."membership_status" AS ENUM('UNREGISTERED', 'ACTIVE', 'OVERDUE', 'SUSPENDED');
-CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'SUCCESSFUL', 'FAILED');
+CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'SUCCESSFUL', 'FAILED', 'CANCELLED');
 CREATE TYPE "public"."payment_type" AS ENUM('REGISTRATION', 'MONTHLY', 'SOAKAWAY');
 CREATE TYPE "public"."pickup_status" AS ENUM('PENDING', 'ACKNOWLEDGED', 'EN_ROUTE', 'AWAITING_CONFIRMATION', 'COMPLETED', 'CANCELLED');
 CREATE TYPE "public"."role" AS ENUM('USER', 'STAFF', 'ADMIN', 'SUPER_ADMIN');
@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" ("id" SERIAL PRIMARY
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '070ad5c07472e889a21c62120bf20ab239d829e44fe21bde8dd26e9e21fd1e39', 1791886365252 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791886365252);
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '3071cb3b0760df98034ce761be238bf25b653e8c39a644e8a0c46cde070b9062', 1791889780822 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791889780822);
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '297925d91a8c3ce5f540c0c5c32770ef23a6f8b7988e9c548174ce9dd2c686a9', 1791894826895 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791894826895);
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '01745902ef587ea6365e442cd62205de0d8a5f62bed0df5bec5ea20d7b88ee13', 1791896546033 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791896546033);
 
 -- Prices in naira (change any time in the app under Prices)
 INSERT INTO "settings" ("key", "value") VALUES
