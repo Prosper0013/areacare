@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { coverageFor, monthName } from "@/lib/billing";
 import { desc, eq } from "drizzle-orm";
 import clsx from "clsx";
 import { db } from "@/db";
@@ -61,7 +62,9 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
             {naira(user.registeredAt ? fees.monthlyFee : fees.registrationFee)}
           </dd>
           <p className="mt-1 text-sm text-moss">
-            {user.registeredAt ? `Due ${shortDate(user.paidThrough)}` : "Registration fee"}
+            {user.registeredAt
+              ? `For ${monthName(coverageFor(user.paidThrough, 1).start)} · pay by ${shortDate(active ? user.paidThrough : new Date())}`
+              : "Registration fee"}
           </p>
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-ring">

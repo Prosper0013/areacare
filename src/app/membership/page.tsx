@@ -14,6 +14,7 @@ import { Stepper } from "@/components/Stepper";
 import { PayButton } from "@/components/PayButton";
 import { PaymentsTable } from "@/components/payments/PaymentsTable";
 import { MonthlyPay } from "@/components/MonthlyPay";
+import { coverageFor, monthName } from "@/lib/billing";
 import { StatusBanner } from "@/components/StatusBanner";
 
 export const metadata = { title: "Membership" };
@@ -38,6 +39,7 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
   const banner = paymentFlag ? PAYMENT_MESSAGES[paymentFlag] : null;
   const registered = Boolean(user.registeredAt);
   const left = daysLeft(user);
+  const next = coverageFor(user.paidThrough, 1);
 
   return (
     <AppShell user={user}>
@@ -47,7 +49,7 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
         subtitle={
           registered
             ? "Keep your dues paid to request pickups any time."
-            : "One payment activates your home and covers your first month of pickups."
+            : `One payment activates your home and covers pickups for ${monthName(new Date())}.`
         }
       />
 
@@ -65,8 +67,8 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
             <ul className="mt-6 space-y-3 text-[15px]">
               {[
                 "Your home is added to your area crew's route",
-                "Unlimited Trash filled requests for the first month",
-                `Then ${naira(fees.monthlyFee)} a month`,
+                `Unlimited Trash filled requests for the rest of ${monthName(new Date())}`,
+                `Then ${naira(fees.monthlyFee)} a month, paid before each new month starts`,
               ].map((t) => (
                 <li key={t} className="flex gap-2.5">
                   <CheckCircle2 size={20} className="shrink-0 text-forest-600" />
@@ -89,12 +91,20 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
                 {user.membershipStatus === "ACTIVE" ? "Active member" : "Dues overdue"}
               </p>
               <p className="mt-2 font-display text-5xl font-extrabold">
-                {user.membershipStatus === "ACTIVE" ? `${left} day${left === 1 ? "" : "s"} left` : "Renew now"}
+                {user.membershipStatus === "ACTIVE" && user.paidThrough ? `${monthName(user.paidThrough)} paid` : "Renew now"}
+              </p>
+              <p className={clsx("mt-2", user.membershipStatus === "ACTIVE" ? "text-white/80" : "text-forest-900")}>
+                {user.membershipStatus === "ACTIVE"
+                  ? `Pay for ${monthName(next.start)} by ${shortDate(user.paidThrough)} to keep your Trash filled button active.`
+                  : `Your Trash filled button is off until you pay for ${monthName(next.start)}.`}
               </p>
               <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <dt className="opacity-70">Paid through</dt>
-                  <dd className="mt-0.5 text-base font-semibold">{shortDate(user.paidThrough)}</dd>
+                  <dt className="opacity-70">Covered until</dt>
+                  <dd className="mt-0.5 text-base font-semibold">
+                    {shortDate(user.paidThrough)}
+                    {user.membershipStatus === "ACTIVE" ? ` · ${left} day${left === 1 ? "" : "s"}` : ""}
+                  </dd>
                 </div>
                 <div>
                   <dt className="opacity-70">Member since</dt>
@@ -105,9 +115,9 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
             <section className="panel p-6 sm:p-8">
               <h2 className="text-2xl font-bold">Pay monthly dues</h2>
               <p className="mb-6 mt-1 text-moss">
-                {naira(fees.monthlyFee)} per month. Paying ahead adds months to your current end date.
+                {naira(fees.monthlyFee)} per calendar month. Paying ahead adds the following months.
               </p>
-              <MonthlyPay monthlyFee={fees.monthlyFee} />
+              <MonthlyPay monthlyFee={fees.monthlyFee} paidThrough={user.paidThrough?.toISOString() ?? null} />
             </section>
           </>
         )}

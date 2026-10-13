@@ -14,7 +14,7 @@ async function loadPublicData(): Promise<{ fees: Fees; zoneNames: string[] }> {
     const [fees, zoneRows] = await Promise.all([getFees(), db.select({ name: zones.name }).from(zones)]);
     return { fees, zoneNames: zoneRows.map((z) => z.name) };
   } catch {
-    return { fees: { registrationFee: 5000, monthlyFee: 2000 }, zoneNames: [] };
+    return { fees: { registrationFee: 5000, monthlyFee: 2000, soakawayFee: 25000 }, zoneNames: [] };
   }
 }
 
@@ -68,6 +68,9 @@ export default async function Home() {
             </Link>
             <a href="#pricing" className="btn-outline px-6 py-3.5 text-base">
               See pricing
+            </a>
+            <a href="#soakaway" className="btn-ghost px-4 py-3.5 text-base underline-offset-4 hover:underline">
+              Soakaway evacuation
             </a>
           </div>
           <dl className="mt-10 grid max-w-md grid-cols-2 gap-6 border-t border-forest-900/10 pt-6">
@@ -180,17 +183,53 @@ export default async function Home() {
             <div className="rounded-3xl bg-forest-900 p-8 text-white">
               <p className="text-white/70">Registration, one time</p>
               <p className="mt-2 font-display text-6xl font-extrabold">{naira(fees.registrationFee)}</p>
-              <p className="mt-4 text-white/80">Activates your home and covers your first month of pickups.</p>
+              <p className="mt-4 text-white/80">Activates your home and covers pickups for the month you join.</p>
             </div>
             <div className="rounded-3xl border-2 border-forest-900/10 p-8">
               <p className="text-moss">Monthly dues</p>
               <p className="mt-2 font-display text-6xl font-extrabold">{naira(fees.monthlyFee)}</p>
-              <p className="mt-4 text-moss">Pay month by month or several months ahead. Prices may change with notice.</p>
+              <p className="mt-4 text-moss">Pay before each month ends to keep the next month covered, or pay several months ahead.</p>
             </div>
           </div>
           <Link href="/signup" className="btn-vest mt-8 px-6 py-3.5 text-base">
             Create your account
           </Link>
+        </div>
+      </section>
+
+      {/* Soakaway evacuation */}
+      <section id="soakaway" className="bg-forest-900 text-white">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 py-20 sm:px-8 lg:grid-cols-[1.1fr_1fr]">
+          <div>
+            <h2 className="text-4xl font-bold leading-tight sm:text-5xl">Soakaway full? Book an evacuation truck.</h2>
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-white/75">
+              Book online, pay securely, and AreaCare confirms the exact date and time. You get a reminder on the morning
+              of the visit and a message when it&apos;s done.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link href="/soakaway" className="btn-vest px-6 py-3.5 text-base">
+                Book an evacuation
+              </Link>
+              <p className="text-white/70">
+                <span className="font-display text-3xl font-extrabold text-white">{naira(fees.soakawayFee)}</span> per evacuation
+              </p>
+            </div>
+          </div>
+          <ol className="grid gap-3">
+            {[
+              ["Book and pay", "Pick a preferred day and pay with card, transfer or USSD."],
+              ["We approve and schedule", "AreaCare sets the date and time and notifies you straight away."],
+              ["We evacuate", "Our truck empties your soakaway. You're told when it's done."],
+            ].map(([t, d], i) => (
+              <li key={t} className="flex gap-4 rounded-2xl bg-white/5 p-5">
+                <span className="font-display text-4xl font-extrabold leading-none text-vest-500">{i + 1}</span>
+                <div>
+                  <p className="text-lg font-semibold">{t}</p>
+                  <p className="text-white/70">{d}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 
