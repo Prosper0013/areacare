@@ -139,6 +139,11 @@ export default async function SoakawayPage({ searchParams }: { searchParams: Pro
                   </p>
                 )}
                 {b.status === "AWAITING_PAYMENT" && (
+                  <p className="mt-3 text-sm text-ember-600">
+                    Pay by {dateTime(new Date(b.createdAt.getTime() + 3 * 86_400_000))} or this booking will be cancelled.
+                  </p>
+                )}
+                {b.status === "AWAITING_PAYMENT" && (
                   <div className="mt-3">
                     <MemberBookingActions id={b.id} amount={b.amount} />
                   </div>
