@@ -1,0 +1,106 @@
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/public-sans";
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  --font-body: "Public Sans Variable", system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-canvas text-forest-900 font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-[-0.02em];
+    font-variation-settings: "wdth" 90;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-vest-500 ring-offset-2 ring-offset-canvas;
+  }
+  ::selection {
+    @apply bg-vest-400 text-forest-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold transition
+      active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply btn bg-forest-600 text-white hover:bg-forest-700;
+  }
+  .btn-vest {
+    @apply btn bg-vest-500 text-forest-900 hover:bg-vest-400;
+  }
+  .btn-dark {
+    @apply btn bg-forest-900 text-white hover:bg-forest-800;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-forest-900 hover:bg-forest-900/5;
+  }
+  .btn-outline {
+    @apply btn border border-forest-900/15 bg-white text-forest-900 hover:border-forest-900/30;
+  }
+  .btn-danger {
+    @apply btn bg-ember-100 text-ember-600 hover:bg-ember-600 hover:text-white;
+  }
+  .btn-sm {
+    @apply rounded-lg px-3 py-2 text-sm;
+  }
+
+  .field {
+    @apply block w-full rounded-xl border border-forest-900/15 bg-white px-4 py-3 text-[15px] text-forest-900
+      placeholder:text-moss/60 transition focus:border-forest-600 focus:outline-none focus:ring-4 focus:ring-forest-600/15;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-semibold text-forest-900;
+  }
+  .hint {
+    @apply mt-1 text-xs text-moss;
+  }
+
+  .panel {
+    @apply rounded-2xl bg-white shadow-ring;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .hazard-edge {
+    @apply relative;
+  }
+  .hazard-edge::before {
+    content: "";
+    @apply absolute inset-x-0 top-0 h-1.5 rounded-t-2xl bg-hazard;
+  }
+}
+
+/* Leaflet sits inside rounded panels */
+.leaflet-container {
+  font-family: var(--font-body);
+  border-radius: inherit;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
