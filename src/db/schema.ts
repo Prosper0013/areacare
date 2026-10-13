@@ -28,7 +28,12 @@ export const membershipEnum = pgEnum("membership_status", [
   "SUSPENDED",
 ]);
 export const paymentTypeEnum = pgEnum("payment_type", ["REGISTRATION", "MONTHLY", "SOAKAWAY"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["PENDING", "SUCCESSFUL", "FAILED"]);
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "PENDING", // checkout started, not confirmed yet
+  "SUCCESSFUL",
+  "FAILED",
+  "CANCELLED", // still unconfirmed after 3 days (see expireStalePayments)
+]);
 export const pickupStatusEnum = pgEnum("pickup_status", [
   "PENDING", // raised by the member
   "ACKNOWLEDGED", // a crew has accepted it
@@ -52,6 +57,7 @@ export type SoakawayStatus = (typeof soakawayStatusEnum.enumValues)[number];
 export type MembershipStatus = (typeof membershipEnum.enumValues)[number];
 export type PickupStatus = (typeof pickupStatusEnum.enumValues)[number];
 export type PaymentType = (typeof paymentTypeEnum.enumValues)[number];
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
 
 /* ---------- tables ---------- */
 
