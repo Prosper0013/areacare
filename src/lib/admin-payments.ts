@@ -6,7 +6,7 @@ export { paymentMethod } from "./format";
 
 export type PaymentFilters = {
   q?: string; // member name, email, phone or payment reference
-  status?: "SUCCESSFUL" | "PENDING" | "FAILED";
+  status?: "SUCCESSFUL" | "PENDING" | "FAILED" | "CANCELLED";
   type?: "REGISTRATION" | "MONTHLY" | "SOAKAWAY";
   from?: string; // yyyy-mm-dd (inclusive)
   to?: string; // yyyy-mm-dd (inclusive)
@@ -19,7 +19,7 @@ export function parseFilters(sp: Record<string, string | undefined>): PaymentFil
   const date = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
   return {
     q: sp.q?.trim() || undefined,
-    status: (["SUCCESSFUL", "PENDING", "FAILED"] as const).find((s) => s === sp.status),
+    status: (["SUCCESSFUL", "PENDING", "FAILED", "CANCELLED"] as const).find((s) => s === sp.status),
     type: (["REGISTRATION", "MONTHLY", "SOAKAWAY"] as const).find((t) => t === sp.type),
     from: date(sp.from),
     to: date(sp.to),
@@ -76,7 +76,7 @@ export async function listPayments(f: PaymentFilters, opts: { all?: boolean } = 
       paidAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL'), 0)`.mapWith(Number),
       pendingCount: sql<number>`count(*) filter (where ${payments.status} = 'PENDING')`.mapWith(Number),
       pendingAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'PENDING'), 0)`.mapWith(Number),
-      failedCount: sql<number>`count(*) filter (where ${payments.status} = 'FAILED')`.mapWith(Number),
+      failedCount: sql<number>`count(*) filter (where ${payments.status} in ('FAILED', 'CANCELLED'))`.mapWith(Number),
       registrationAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'REGISTRATION'), 0)`.mapWith(Number),
       soakawayAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'SOAKAWAY'), 0)`.mapWith(Number),
       monthlyAmount: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.status} = 'SUCCESSFUL' and ${payments.type} = 'MONTHLY'), 0)`.mapWith(Number),
