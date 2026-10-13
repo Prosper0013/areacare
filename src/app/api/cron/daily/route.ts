@@ -6,6 +6,7 @@ import { shortDate } from "@/lib/format";
 import { notifyUsers } from "@/lib/notify";
 import { sendConfirmationReminders } from "@/lib/pickups";
 import { remindTodaysEvacuations } from "@/lib/soakaway";
+import { expireStalePayments } from "@/lib/payments";
 import { startOfLagosDay } from "@/lib/ops";
 import { coverageFor, monthName } from "@/lib/billing";
 
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
  * 1. Keeps the free database awake (Supabase pauses projects after 7 idle days).
  * 2. Marks members whose dues have lapsed as OVERDUE and tells them.
  * 3. Reminds members whose dues run out in 3 days.
+ * 4–6. Pickup confirmation reminders, soakaway reminders, and cancelling stale pending payments.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -74,6 +76,9 @@ export async function GET(req: Request) {
   // 5. Morning reminders for soakaway evacuations scheduled today
   const evacuationsToday = await remindTodaysEvacuations(startOfLagosDay(now));
 
+  // 6. Cancel payments (and unpaid soakaway bookings) still pending after 3 days
+  const expired = await expireStalePayments(now);
+
   return NextResponse.json({
     ok: true,
     at: now.toISOString(),
@@ -81,5 +86,6 @@ export async function GET(req: Request) {
     reminded: dueSoon.length,
     confirmations,
     evacuationsToday,
+    expired,
   });
 }
