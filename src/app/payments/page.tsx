@@ -19,13 +19,14 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
   const user = await requireUser(["USER"]);
   const { status } = await searchParams;
   const filter = status === "paid" ? "SUCCESSFUL" : status === "pending" ? "PENDING" : status === "failed" ? "FAILED" : null;
+  const matches = (s: string) => (filter === "FAILED" ? s === "FAILED" || s === "CANCELLED" : s === filter);
 
   const [summary, fees, all] = await Promise.all([
     memberPaymentSummary(user.id),
     getFees(),
     db.query.payments.findMany({ where: eq(payments.userId, user.id), orderBy: desc(payments.createdAt), limit: 500 }),
   ]);
-  const rows = filter ? all.filter((p) => p.status === filter) : all;
+  const rows = filter ? all.filter((p) => matches(p.status)) : all;
   const active = canRequestPickup(user);
   const left = daysLeft(user);
 
@@ -86,7 +87,7 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
               ["", "All", all.length],
               ["paid", "Paid", all.filter((p) => p.status === "SUCCESSFUL").length],
               ["pending", "Pending", summary.pendingCount],
-              ["failed", "Failed", all.filter((p) => p.status === "FAILED").length],
+              ["failed", "Failed / cancelled", all.filter((p) => p.status === "FAILED" || p.status === "CANCELLED").length],
             ].map(([key, label, n]) => (
               <Link
                 key={label as string}
@@ -104,7 +105,7 @@ export default async function MemberPaymentsPage({ searchParams }: { searchParam
         {summary.pendingCount > 0 && !filter && (
           <p className="border-b border-forest-900/5 bg-vest-100/50 px-5 py-3 text-sm">
             A pending payment is waiting for Flutterwave to confirm it. Bank transfers can take a few minutes — use{" "}
-            <span className="font-semibold">Check again</span> to refresh it.
+            <span className="font-semibold">Check again</span> to refresh it. Payments still unconfirmed after 3 days are cancelled.
           </p>
         )}
         <PaymentsTable
