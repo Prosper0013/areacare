@@ -1,0 +1,19 @@
+# Buzzes members every 30 minutes until they confirm their bin was cleared.
+# Free on GitHub. Setup: repo → Settings → Secrets and variables → Actions → add
+#   APP_URL      e.g. https://areacare.vercel.app
+#   CRON_SECRET  the same value as in Vercel
+name: Pickup confirmation reminders
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send due reminders
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then echo "APP_URL secret not set — skipping"; exit 0; fi
+          curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/reminders"
