@@ -13,8 +13,12 @@ import {
   type PickupStatus,
   type User,
 } from "@/db/schema";
-import { addressLine } from "./format";
+import { addressLine, binsLabel, naira } from "./format";
+export { binsLabel };
 import { notifyUsers } from "./notify";
+import { binsAffordable } from "./membership";
+import { getFees } from "./settings";
+import { moveCredit, refundPickup } from "./wallet";
 
 /** Requests still in progress. A member can't raise a new one until theirs leaves this list. */
 export const OPEN_STATUSES: PickupStatus[] = ["PENDING", "ACKNOWLEDGED", "EN_ROUTE", "AWAITING_CONFIRMATION"];
@@ -62,8 +66,14 @@ export type NewPickupInput = {
   lng?: number | null;
   accuracy?: number | null;
   note?: string | null;
+  bins: number;
 };
 
+/**
+ * "Trash filled": charges the member (cans × price per can) from their credit and
+ * creates the request in one transaction, then alerts management and the area crew.
+ * Throws InsufficientCredit when the balance can't cover it.
+ */
 export async function createPickup(user: User, input: NewPickupInput) {
   const zone = user.zoneId ? await db.query.zones.findFirst({ where: eq(zones.id, user.zoneId) }) : null;
 
@@ -83,10 +93,26 @@ export async function createPickup(user: User, input: NewPickupInput) {
   const hasLive = typeof input.lat === "number" && typeof input.lng === "number";
   const crews = await crewsForZone(user.zoneId);
 
-  const [pickup] = await db
+  const { binPrice } = await getFees();
+  const charge = input.bins * binPrice;
+
+  const result = await db.transaction(async (tx) => {
+    // Lock the member so a double tap can't raise (and pay for) two requests.
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
+    const [already] = await tx
+      .select()
+      .from(pickups)
+      .where(and(eq(pickups.userId, user.id), inArray(pickups.status, OPEN_STATUSES)))
+      .limit(1);
+    if (already) return { existing: already };
+
+    const [created] = await tx
     .insert(pickups)
     .values({
       userId: user.id,
+      binCount: input.bins,
+      binPrice,
+      charge,
       lat: hasLive ? input.lat : user.homeLat,
       lng: hasLive ? input.lng : user.homeLng,
       accuracy: hasLive ? (input.accuracy ?? null) : null,
@@ -97,12 +123,23 @@ export async function createPickup(user: User, input: NewPickupInput) {
       teamId: crews.teams[0]?.id ?? null,
     })
     .returning();
+    const moved = await moveCredit(tx, {
+      userId: user.id,
+      amount: -charge,
+      type: "PICKUP_CHARGE",
+      pickupId: created.id,
+      note: `${binsLabel(input.bins)} × ${naira(binPrice)}`,
+    });
+    return { pickup: created, balanceAfter: moved.balanceAfter };
+  });
+  if ("existing" in result) return { pickup: result.existing!, existing: true as const, balanceAfter: user.creditBalance };
+  const { pickup, balanceAfter } = result;
 
   const recipients = [...(await managementIds()), ...crews.staffIds].filter((id) => id !== user.id);
   await notifyUsers(recipients, {
     kind: "pickup",
-    title: `Trash filled · ${zone?.name ?? "No zone"}`,
-    body: `${user.name} — ${addressLine(address) || "address not set"}${
+    title: `Trash filled · ${binsLabel(input.bins)} · ${zone?.name ?? "No zone"}`,
+    body: `${user.name} — ${binsLabel(input.bins)}\n${addressLine(address) || "address not set"}${
       address.landmark ? `\nLandmark: ${address.landmark}` : ""
     }\nPhone: ${user.phone}`,
     link: `/ops/requests/${pickup.id}`,
@@ -112,13 +149,24 @@ export async function createPickup(user: User, input: NewPickupInput) {
   await notifyUsers([user.id], {
     kind: "pickup",
     title: "Pickup request sent",
-    body: crews.teams.length
-      ? `${crews.teams.map((t) => t.name).join(", ")} and management have been alerted.`
-      : "Management has been alerted and will dispatch a crew.",
+    body: `${binsLabel(input.bins)} · ${naira(charge)} taken from your credit (${naira(balanceAfter)} left). ${
+      crews.teams.length
+        ? `${crews.teams.map((t) => t.name).join(", ")} and management have been alerted.`
+        : "Management has been alerted and will dispatch a crew."
+    }`,
     link: "/dashboard",
   });
 
-  return pickup;
+  if (binsAffordable(balanceAfter, binPrice) === 0) {
+    await notifyUsers([user.id], {
+      kind: "payment",
+      title: "Top up your credit",
+      body: `You have ${naira(balanceAfter)} left — not enough for your next trash can (${naira(binPrice)}). Top up so your Trash filled button stays on.`,
+      link: "/wallet",
+    });
+  }
+
+  return { pickup, existing: false as const, balanceAfter };
 }
 
 /* ───────────── Status changes by crew and management ───────────── */
@@ -201,6 +249,9 @@ export async function updatePickupStatus(pickup: Pickup, next: PickupStatus, act
     .returning();
   if (!updated) return { error: "Someone else just updated this request. Refresh to see the latest." };
 
+  const refund = next === "CANCELLED" ? await refundPickup(updated.id, isOwner ? "You cancelled the pickup" : "Cancelled by AreaCare") : null;
+  const refundText = refund ? ` ${naira(refund.amount)} has been returned to your credit.` : "";
+
   if (next === "AWAITING_CONFIRMATION") {
     await notifyUsers([pickup.userId], { ...confirmMessage(updated), email: true });
   } else if (next === "COMPLETED") {
@@ -216,7 +267,8 @@ export async function updatePickupStatus(pickup: Pickup, next: PickupStatus, act
     });
   } else {
     const msg = MEMBER_MESSAGES[next];
-    if (msg && !isOwner) await notifyUsers([pickup.userId], { kind: "pickup", title: msg[0], body: msg[1], link: "/dashboard" });
+    if (msg && !isOwner)
+      await notifyUsers([pickup.userId], { kind: "pickup", title: msg[0], body: msg[1] + (next === "CANCELLED" ? refundText : ""), link: "/dashboard" });
   }
 
   if (isOwner && next === "CANCELLED") {
@@ -227,7 +279,7 @@ export async function updatePickupStatus(pickup: Pickup, next: PickupStatus, act
       link: `/ops/requests/${pickup.id}`,
     });
   }
-  return { pickup: updated };
+  return { pickup: updated, refund };
 }
 
 /** Crew who handled the request, plus management. */

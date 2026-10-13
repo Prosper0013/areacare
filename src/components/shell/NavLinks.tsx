@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { motion } from "framer-motion";
 import {
-  BadgeCheck,
   Bell,
   ClipboardList,
   CreditCard,
@@ -16,6 +15,7 @@ import {
   Truck,
   Users,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/db/schema";
@@ -26,10 +26,10 @@ export function navFor(role: Role): Item[] {
   if (role === "USER")
     return [
       { href: "/dashboard", label: "Home", icon: Home, exact: true },
+      { href: "/wallet", label: "Credit", icon: Wallet },
       { href: "/dashboard/history", label: "Pickups", icon: ClipboardList },
       { href: "/soakaway", label: "Soakaway", icon: Truck },
       { href: "/payments", label: "Payments", icon: CreditCard },
-      { href: "/membership", label: "Membership", icon: BadgeCheck },
       { href: "/notifications", label: "Alerts", icon: Bell },
     ];
   const ops: Item[] = [

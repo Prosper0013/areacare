@@ -9,13 +9,13 @@ import { api } from "@/lib/client";
 /** Starts a Flutterwave checkout and sends the member to the hosted payment page. */
 export function PayButton({
   type,
-  months = 1,
+  amount,
   label,
   className,
   variant = "vest",
 }: {
-  type: "REGISTRATION" | "MONTHLY";
-  months?: number;
+  type: "REGISTRATION" | "TOPUP";
+  amount?: number;
   label: string;
   className?: string;
   variant?: "vest" | "primary" | "outline";
@@ -25,7 +25,7 @@ export function PayButton({
   async function pay() {
     setBusy(true);
     try {
-      const { link } = await api<{ link: string }>("/api/payments/initiate", { body: { type, months } });
+      const { link } = await api<{ link: string }>("/api/payments/initiate", { body: { type, amount } });
       window.location.href = link;
     } catch (err) {
       toast.error((err as Error).message);
@@ -34,7 +34,7 @@ export function PayButton({
   }
 
   return (
-    <button onClick={pay} disabled={busy} className={clsx(`btn-${variant}`, className)}>
+    <button type="button" onClick={pay} disabled={busy || (type === "TOPUP" && !amount)} className={clsx(`btn-${variant}`, className)}>
       {busy ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
       {busy ? "Opening secure checkout…" : label}
     </button>

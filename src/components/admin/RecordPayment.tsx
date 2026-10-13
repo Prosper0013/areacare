@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/client";
 import { naira } from "@/lib/format";
 
+/** Records cash / direct-transfer money: registration for new members, credit top-up after that. */
 export function RecordPayment({
   userId,
   registered,
@@ -15,24 +16,25 @@ export function RecordPayment({
 }: {
   userId: string;
   registered: boolean;
-  fees: { registrationFee: number; monthlyFee: number };
+  fees: { registrationFee: number; registrationCredit: number; binPrice: number };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [months, setMonths] = useState(1);
-  const type = registered ? "MONTHLY" : "REGISTRATION";
-  const suggested = registered ? fees.monthlyFee * months : fees.registrationFee;
+  const type = registered ? "TOPUP" : "REGISTRATION";
+  const suggested = registered ? fees.binPrice * 4 : fees.registrationFee;
   const [amount, setAmount] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const value = Math.round(Number(amount || suggested));
+  const credit = registered
+    ? value
+    : Math.max(0, Math.min(fees.registrationCredit, value)) + Math.max(0, value - fees.registrationFee);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      await api("/api/admin/payments", {
-        body: { userId, type, months, amount: Math.round(Number(amount || suggested)) },
-      });
-      toast.success("Payment recorded and membership extended");
+      await api("/api/admin/payments", { body: { userId, type, amount: value } });
+      toast.success(registered ? `${naira(value)} added to their credit` : "Registration recorded");
       setOpen(false);
       setAmount("");
       router.refresh();
@@ -76,29 +78,12 @@ export function RecordPayment({
                   <X size={20} />
                 </button>
               </div>
-              <p className="mt-1 text-sm text-moss">
-                For money received in cash or by direct transfer. The member's membership is extended and they get a receipt.
-              </p>
+              <p className="mt-1 text-sm text-moss">For money received in cash or by direct transfer. The member gets a receipt.</p>
 
               <p className="label mt-5">For</p>
               <p className="rounded-xl bg-canvas px-4 py-3 font-semibold">
-                {registered ? "Monthly dues" : "Registration (includes the first month)"}
+                {registered ? "Credit top-up" : `Registration (includes ${naira(fees.registrationCredit)} credit)`}
               </p>
-
-              {registered && (
-                <div className="mt-4">
-                  <label htmlFor="rp-months" className="label">
-                    Months
-                  </label>
-                  <select id="rp-months" value={months} onChange={(e) => setMonths(Number(e.target.value))} className="field">
-                    {[1, 2, 3, 6, 12].map((m) => (
-                      <option key={m} value={m}>
-                        {m} month{m === 1 ? "" : "s"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               <div className="mt-4">
                 <label htmlFor="rp-amount" className="label">
@@ -110,19 +95,26 @@ export function RecordPayment({
                     id="rp-amount"
                     type="number"
                     inputMode="numeric"
-                    min={0}
+                    min={1}
                     value={amount}
                     placeholder={String(suggested)}
                     onChange={(e) => setAmount(e.target.value)}
                     className="field pl-9 font-display text-lg font-bold"
                   />
                 </div>
-                <p className="hint">Leave blank to use the current price, {naira(suggested)}.</p>
+                <p className="hint">
+                  {registered ? "The full amount is added to their credit." : `Leave blank for the current fee, ${naira(fees.registrationFee)}.`}
+                </p>
               </div>
 
-              <button className="btn-primary mt-6 w-full py-3.5" disabled={busy}>
+              <div className="mt-4 flex justify-between rounded-xl border border-forest-900/10 px-4 py-3 text-sm">
+                <span className="text-moss">Credit they&apos;ll receive</span>
+                <span className="font-semibold">{naira(credit)}</span>
+              </div>
+
+              <button className="btn-primary mt-6 w-full py-3.5" disabled={busy || !(value > 0)}>
                 {busy && <Loader2 size={16} className="animate-spin" />}
-                Record {naira(Number(amount || suggested))}
+                Record {naira(value || 0)}
               </button>
             </motion.form>
           </motion.div>

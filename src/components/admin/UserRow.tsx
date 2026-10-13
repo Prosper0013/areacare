@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import clsx from "clsx";
 import type { MembershipStatus, Role } from "@/db/schema";
 import { api } from "@/lib/client";
-import { shortDate } from "@/lib/format";
+import { naira } from "@/lib/format";
 
 export type AdminUserRow = {
   id: string;
@@ -16,7 +16,8 @@ export type AdminUserRow = {
   phone: string;
   role: Role;
   membershipStatus: MembershipStatus;
-  paidThrough: string | null;
+  creditBalance: number;
+  registered: boolean;
   zone: string | null;
   teamIds: string[];
   isSelf: boolean;
@@ -31,7 +32,7 @@ const ROLES: { value: Role; label: string }[] = [
 
 const STATUS: Record<MembershipStatus, [string, string]> = {
   ACTIVE: ["Active", "bg-forest-100 text-forest-700"],
-  OVERDUE: ["Overdue", "bg-ember-100 text-ember-600"],
+  OVERDUE: ["Active", "bg-forest-100 text-forest-700"], // old monthly plan; treated as active
   UNREGISTERED: ["Not registered", "bg-forest-900/5 text-moss"],
   SUSPENDED: ["Suspended", "bg-forest-900 text-white"],
 };
@@ -74,7 +75,7 @@ export function UserRow({ user, teams }: { user: AdminUserRow; teams: { id: stri
         {isMember || user.membershipStatus === "SUSPENDED" ? (
           <>
             <span className={clsx("chip", statusCls)}>{statusLabel}</span>
-            {user.paidThrough && <p className="mt-1 text-xs text-moss">to {shortDate(user.paidThrough)}</p>}
+            {user.registered && <p className="mt-1 text-xs font-semibold text-forest-900">{naira(user.creditBalance)} credit</p>}
           </>
         ) : (
           <span className="text-moss">—</span>

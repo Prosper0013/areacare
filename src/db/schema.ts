@@ -27,7 +27,15 @@ export const membershipEnum = pgEnum("membership_status", [
   "OVERDUE",
   "SUSPENDED",
 ]);
-export const paymentTypeEnum = pgEnum("payment_type", ["REGISTRATION", "MONTHLY", "SOAKAWAY"]);
+// MONTHLY is kept only for payments made before pay-as-you-go; new payments never use it.
+export const paymentTypeEnum = pgEnum("payment_type", ["REGISTRATION", "MONTHLY", "SOAKAWAY", "TOPUP"]);
+export const walletEntryTypeEnum = pgEnum("wallet_entry_type", [
+  "REGISTRATION_CREDIT", // starting credit included in the registration fee
+  "TOPUP", // member added credit through Flutterwave or cash
+  "PICKUP_CHARGE", // trash cans collected (negative)
+  "PICKUP_REFUND", // pickup cancelled, charge returned
+  "ADJUSTMENT", // set by the super admin
+]);
 export const paymentStatusEnum = pgEnum("payment_status", [
   "PENDING", // checkout started, not confirmed yet
   "SUCCESSFUL",
@@ -58,6 +66,7 @@ export type MembershipStatus = (typeof membershipEnum.enumValues)[number];
 export type PickupStatus = (typeof pickupStatusEnum.enumValues)[number];
 export type PaymentType = (typeof paymentTypeEnum.enumValues)[number];
 export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
+export type WalletEntryType = (typeof walletEntryTypeEnum.enumValues)[number];
 
 /* ---------- tables ---------- */
 
@@ -79,7 +88,8 @@ export const users = pgTable(
     role: roleEnum("role").default("USER").notNull(),
     membershipStatus: membershipEnum("membership_status").default("UNREGISTERED").notNull(),
     registeredAt: timestamp("registered_at", { withTimezone: true }),
-    paidThrough: timestamp("paid_through", { withTimezone: true }),
+    paidThrough: timestamp("paid_through", { withTimezone: true }), // legacy (monthly billing), unused
+    creditBalance: integer("credit_balance").default(0).notNull(), // naira available for pickups
 
     // House details captured at onboarding
     houseNumber: text("house_number"),
@@ -162,6 +172,10 @@ export const pickups = pgTable(
     accuracy: doublePrecision("accuracy"),
     locationSource: text("location_source").default("live").notNull(),
     note: text("note"),
+    binCount: integer("bin_count").default(1).notNull(), // filled trash cans to collect
+    binPrice: integer("bin_price").default(0).notNull(), // naira per can at request time
+    charge: integer("charge").default(0).notNull(), // naira taken from credit (binCount × binPrice)
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     address: jsonb("address").$type<AddressSnapshot>().notNull(),
     zoneId: text("zone_id").references(() => zones.id, { onDelete: "set null" }),
     teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
@@ -243,6 +257,7 @@ export const payments = pgTable(
     amount: integer("amount").notNull(), // naira
     currency: text("currency").default("NGN").notNull(),
     months: integer("months").default(1).notNull(),
+    creditAmount: integer("credit_amount").default(0).notNull(), // naira added to the member's credit when paid
     status: paymentStatusEnum("status").default("PENDING").notNull(),
     periodStart: timestamp("period_start", { withTimezone: true }),
     periodEnd: timestamp("period_end", { withTimezone: true }),
@@ -250,6 +265,26 @@ export const payments = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },
   (t) => [index("payments_user_idx").on(t.userId, t.createdAt)],
+);
+
+/** Every change to a member's credit balance. `amount` is signed; `balanceAfter` is the running balance. */
+export const walletEntries = pgTable(
+  "wallet_entries",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: walletEntryTypeEnum("type").notNull(),
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    pickupId: text("pickup_id").references(() => pickups.id, { onDelete: "set null" }),
+    paymentId: text("payment_id").references(() => payments.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdById: text("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("wallet_user_idx").on(t.userId, t.createdAt)],
 );
 
 export const notifications = pgTable(
@@ -331,6 +366,13 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   booking: one(soakawayBookings, { fields: [payments.bookingId], references: [soakawayBookings.id] }),
 }));
 
+export const walletEntriesRelations = relations(walletEntries, ({ one }) => ({
+  user: one(users, { fields: [walletEntries.userId], references: [users.id], relationName: "wallet" }),
+  pickup: one(pickups, { fields: [walletEntries.pickupId], references: [pickups.id] }),
+  payment: one(payments, { fields: [walletEntries.paymentId], references: [payments.id] }),
+  createdBy: one(users, { fields: [walletEntries.createdById], references: [users.id], relationName: "walletAdmin" }),
+}));
+
 export const soakawayRelations = relations(soakawayBookings, ({ one, many }) => ({
   user: one(users, { fields: [soakawayBookings.userId], references: [users.id], relationName: "booker" }),
   approvedBy: one(users, { fields: [soakawayBookings.approvedById], references: [users.id], relationName: "approver" }),
@@ -345,3 +387,4 @@ export type Zone = typeof zones.$inferSelect;
 export type Team = typeof teams.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type SoakawayBooking = typeof soakawayBookings.$inferSelect;
+export type WalletEntry = typeof walletEntries.$inferSelect;

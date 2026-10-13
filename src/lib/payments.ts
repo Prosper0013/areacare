@@ -1,10 +1,10 @@
 import "server-only";
 import { and, eq, lt } from "drizzle-orm";
 import { db } from "@/db";
-import { payments, soakawayBookings } from "@/db/schema";
+import { payments, soakawayBookings, type Payment } from "@/db/schema";
 import { isGenuine, verifyByReference, verifyTransaction } from "./flutterwave";
 import { applySuccessfulPayment } from "./membership";
-import { naira, shortDate } from "./format";
+import { naira } from "./format";
 import { notifyUsers } from "./notify";
 import { onBookingPaid } from "./soakaway";
 
@@ -27,19 +27,28 @@ export async function confirmPayment(txRef: string, transactionId?: string | num
     return { status: "pending" as const, payment };
   }
 
-  const { payment: applied, alreadyApplied } = await applySuccessfulPayment(payment.id, String(tx!.id));
+  const { payment: applied, alreadyApplied, balanceAfter } = await applySuccessfulPayment(payment.id, String(tx!.id));
   if (!alreadyApplied && applied.type === "SOAKAWAY") {
     if (applied.bookingId) await onBookingPaid(applied.bookingId);
   } else if (!alreadyApplied) {
-    await notifyUsers([payment.userId], {
-      kind: "payment",
-      title: payment.type === "REGISTRATION" ? "Welcome to AreaCare" : "Payment received",
-      body: `${naira(payment.amount)} received. Your membership is active until ${shortDate(applied.periodEnd)}.`,
-      link: "/membership",
-      email: true,
-    });
+    await notifyUsers([payment.userId], paymentMessage(applied, balanceAfter));
   }
   return { status: "successful" as const, payment: applied };
+}
+
+/** What the member is told once a registration or top-up is applied. */
+export function paymentMessage(p: Pick<Payment, "type" | "amount" | "creditAmount">, balanceAfter: number | null) {
+  const balance = balanceAfter != null ? ` Your credit is now ${naira(balanceAfter)}.` : "";
+  return {
+    kind: "payment" as const,
+    title: p.type === "REGISTRATION" ? "Welcome to AreaCare" : "Credit added",
+    body:
+      p.type === "REGISTRATION"
+        ? `${naira(p.amount)} received. Your home is registered and ${naira(p.creditAmount)} pickup credit has been added.${balance}`
+        : `${naira(p.amount)} received and added to your credit.${balance}`,
+    link: "/wallet",
+    email: true,
+  };
 }
 
 /** How long a checkout can stay "Pending" before it's cancelled. */

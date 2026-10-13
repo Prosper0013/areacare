@@ -4,20 +4,22 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Lock, MapPin, X } from "lucide-react";
+import { Loader2, Lock, MapPin, Minus, Plus, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, getPosition } from "@/lib/client";
-import { PICKUP_STATUS_LABEL } from "@/lib/format";
+import { PICKUP_STATUS_LABEL, binsLabel, naira } from "@/lib/format";
 import { BinScene } from "./BinScene";
 import { PickupTimeline, type TimelinePickup } from "./PickupTimeline";
 import { ConfirmClearance } from "./confirm/ConfirmClearance";
 
-type OpenPickup = TimelinePickup & { id: string; locationSource: string; clearedNote?: string | null };
+type OpenPickup = TimelinePickup & { id: string; locationSource: string; clearedNote?: string | null; binCount?: number; charge?: number };
 
 export function TrashFilledPanel({
   canRequest,
   lockedReason,
-  payMonth,
+  balance: initialBalance,
+  binPrice,
+  maxBins,
   address,
   landmark,
   hasHomePin,
@@ -25,8 +27,10 @@ export function TrashFilledPanel({
   startWithNo = false,
 }: {
   canRequest: boolean;
-  lockedReason: "register" | "renew" | "suspended" | null;
-  payMonth?: string;
+  lockedReason: "register" | "topup" | "suspended" | null;
+  balance: number;
+  binPrice: number;
+  maxBins: number;
   address: string;
   landmark: string | null;
   hasHomePin: boolean;
@@ -38,6 +42,13 @@ export function TrashFilledPanel({
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState<"locating" | "sending" | null>(null);
   const [note, setNote] = useState("");
+  const [bins, setBins] = useState(1);
+  const [balance, setBalance] = useState(initialBalance);
+  useEffect(() => setBalance(initialBalance), [initialBalance]);
+  const affordable = binPrice > 0 ? Math.floor(balance / binPrice) : 0;
+  const pickLimit = Math.max(1, Math.min(maxBins, affordable));
+  const cost = bins * binPrice;
+  const enough = cost <= balance;
 
   // Follow the open request until it closes.
   const refresh = useCallback(async () => {
@@ -75,13 +86,18 @@ export function TrashFilledPanel({
     }
     setSending("sending");
     try {
-      const res = await api<{ pickup: OpenPickup; existing: boolean }>("/api/pickups", {
-        body: { lat: coords?.lat ?? null, lng: coords?.lng ?? null, accuracy: coords?.accuracy ?? null, note: note || null },
+      const res = await api<{ pickup: OpenPickup; existing: boolean; balance: number }>("/api/pickups", {
+        body: { bins, lat: coords?.lat ?? null, lng: coords?.lng ?? null, accuracy: coords?.accuracy ?? null, note: note || null },
       });
       setPickup(res.pickup);
+      setBalance(res.balance);
       setConfirming(false);
       setNote("");
-      toast.success(res.existing ? "You already have a pickup in progress" : "Pickup requested. Your crew has been alerted.");
+      setBins(1);
+      toast.success(
+        res.existing ? "You already have a pickup in progress" : `Pickup requested for ${binsLabel(res.pickup.binCount ?? bins)}`,
+        res.existing ? undefined : { description: `${naira(res.pickup.charge ?? cost)} taken from your credit · ${naira(res.balance)} left` },
+      );
       router.refresh();
     } catch (err) {
       toast.error((err as Error).message);
@@ -98,7 +114,8 @@ export function TrashFilledPanel({
         body: { status: "CANCELLED" },
       });
       setPickup(p);
-      toast("Pickup cancelled");
+      if (p.charge) setBalance((b) => b + (p.charge ?? 0));
+      toast("Pickup cancelled", { description: p.charge ? `${naira(p.charge)} returned to your credit.` : undefined });
       router.refresh();
     } catch (err) {
       toast.error((err as Error).message);
@@ -143,7 +160,7 @@ export function TrashFilledPanel({
 
           <div className="mt-6 flex justify-center">
             {!canRequest ? (
-              <LockedCta reason={lockedReason} payMonth={payMonth} />
+              <LockedCta reason={lockedReason} balance={balance} binPrice={binPrice} />
             ) : active ? (
               <span className={awaiting ? "chip bg-vest-500 px-4 py-2 text-sm text-forest-900" : "chip bg-forest-900 px-4 py-2 text-sm text-white"}>
                 {awaiting ? "Cleared? Please confirm" : PICKUP_STATUS_LABEL[pickup!.status]}
@@ -151,7 +168,10 @@ export function TrashFilledPanel({
             ) : (
               <motion.button
                 whileTap={{ scale: 0.94 }}
-                onClick={() => setConfirming(true)}
+                onClick={() => {
+                  setBins((b) => Math.min(b, pickLimit));
+                  setConfirming(true);
+                }}
                 aria-label="Trash filled"
                 className="relative grid h-40 w-40 place-items-center rounded-full bg-vest-500 text-forest-900 shadow-lift transition hover:bg-vest-400 sm:h-44 sm:w-44"
               >
@@ -165,6 +185,15 @@ export function TrashFilledPanel({
               </motion.button>
             )}
           </div>
+          {canRequest && !active && (
+            <Link
+              href="/wallet"
+              className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold shadow-ring transition hover:shadow-lift"
+            >
+              <Wallet size={16} className="text-forest-600" />
+              {naira(balance)} credit · {binsLabel(affordable)}
+            </Link>
+          )}
         </div>
 
         {/* Details */}
@@ -173,7 +202,8 @@ export function TrashFilledPanel({
             <>
               <h2 className="text-2xl font-bold">{finished ? "Last pickup · cleared" : "Your pickup"}</h2>
               <p className="mb-6 mt-1 text-moss">
-                {pickup!.locationSource === "live" ? "Sent with your live location." : "Sent with your saved house pin."}
+                {pickup!.binCount ? `${binsLabel(pickup!.binCount)}${pickup!.charge ? ` · ${naira(pickup!.charge)}` : ""} · ` : ""}
+                {pickup!.locationSource === "live" ? "sent with your live location." : "sent with your saved house pin."}
               </p>
               <PickupTimeline pickup={pickup!} viewer="member" />
               {active && pickup!.status === "PENDING" && (
@@ -191,7 +221,8 @@ export function TrashFilledPanel({
             <>
               <h2 className="text-2xl font-bold">Bin full?</h2>
               <p className="mt-1 text-moss">
-                Press the button and your area crew and management get your address and location immediately.
+                Press the button, say how many trash cans are full, and your area crew gets your address and location
+                immediately. Each can is {naira(binPrice)} from your credit.
               </p>
               <div className="mt-6 rounded-xl bg-canvas p-4">
                 <p className="flex items-start gap-2 font-semibold">
@@ -206,9 +237,10 @@ export function TrashFilledPanel({
               <h3 className="mt-8 text-lg font-bold">What happens when you press it</h3>
               <ol className="mt-3 space-y-3 text-[15px]">
                 {[
+                  `You choose how many cans are full — ${naira(binPrice)} each comes off your credit.`,
                   "Your crew and management get an alert with your address and location.",
                   "A crew member accepts it and you're told they're coming.",
-                  "You get a message when your bin has been emptied.",
+                  "You get a message when your bins have been emptied. Cancel before then and the charge is refunded.",
                 ].map((t, i) => (
                   <li key={t} className="flex gap-3">
                     <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-forest-100 text-xs font-bold text-forest-700">
@@ -242,7 +274,7 @@ export function TrashFilledPanel({
               exit={{ y: 40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 380, damping: 32 }}
               onClick={(e) => e.stopPropagation()}
-              className="hazard-edge w-full max-w-md rounded-t-3xl bg-white p-6 pt-8 sm:rounded-3xl"
+              className="hazard-edge max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 pt-8 sm:rounded-3xl"
             >
               <div className="flex items-start justify-between">
                 <h3 id="confirm-title" className="text-2xl font-bold">
@@ -253,6 +285,72 @@ export function TrashFilledPanel({
                 </button>
               </div>
               <p className="mt-2 text-moss">We'll share your live location so the crew can find your gate.</p>
+
+              <p className="label mt-5">How many trash cans are full?</p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setBins((b) => Math.max(1, b - 1))}
+                  disabled={bins <= 1 || !!sending}
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border-2 border-forest-900/10 transition hover:border-forest-900/30 disabled:opacity-30"
+                  aria-label="One less trash can"
+                >
+                  <Minus size={18} />
+                </button>
+                <div className="flex-1 text-center" aria-live="polite">
+                  <motion.p key={bins} initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="font-display text-5xl font-extrabold leading-none">
+                    {bins}
+                  </motion.p>
+                  <p className="mt-1 text-sm text-moss">trash can{bins === 1 ? "" : "s"}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBins((b) => Math.min(maxBins, b + 1))}
+                  disabled={bins >= maxBins || !!sending}
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border-2 border-forest-900/10 transition hover:border-forest-900/30 disabled:opacity-30"
+                  aria-label="One more trash can"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+              <div className="mt-3 flex min-h-[28px] flex-wrap justify-center gap-1.5" aria-hidden>
+                <AnimatePresence initial={false}>
+                  {Array.from({ length: bins }, (_, i) => (
+                    <motion.span
+                      key={i}
+                      initial={{ y: 10, scale: 0.5, opacity: 0 }}
+                      animate={{ y: 0, scale: 1, opacity: 1 }}
+                      exit={{ y: 10, scale: 0.5, opacity: 0 }}
+                      className={i < affordable ? "text-forest-600" : "text-ember-600"}
+                    >
+                      <Trash2 size={22} />
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+              </div>
+              <div className="mt-4 space-y-1.5 rounded-xl border border-forest-900/10 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-moss">
+                    {bins} × {naira(binPrice)}
+                  </span>
+                  <span className="font-display text-lg font-bold">{naira(cost)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-moss">Credit after</span>
+                  <span className={enough ? "font-semibold" : "font-semibold text-ember-600"}>
+                    {enough ? naira(balance - cost) : `Short by ${naira(cost - balance)}`}
+                  </span>
+                </div>
+              </div>
+              {!enough && (
+                <p className="mt-3 text-sm">
+                  Your {naira(balance)} covers {binsLabel(affordable)}.{" "}
+                  <Link href="/wallet" className="font-semibold text-forest-600 hover:underline">
+                    Top up credit
+                  </Link>
+                </p>
+              )}
+
               <div className="mt-5 rounded-xl bg-canvas p-4 text-sm">
                 <p className="font-semibold">{address}</p>
                 {landmark && <p className="text-moss">Landmark: {landmark}</p>}
@@ -269,9 +367,13 @@ export function TrashFilledPanel({
                 className="field resize-none"
                 placeholder="Two bags beside the bin today"
               />
-              <button onClick={send} disabled={!!sending} className="btn-vest mt-5 w-full py-4 text-base">
+              <button onClick={send} disabled={!!sending || !enough} className="btn-vest mt-5 w-full py-4 text-base">
                 {sending && <Loader2 size={18} className="animate-spin" />}
-                {sending === "locating" ? "Getting your location…" : sending === "sending" ? "Alerting your crew…" : "Send request"}
+                {sending === "locating"
+                  ? "Getting your location…"
+                  : sending === "sending"
+                    ? "Alerting your crew…"
+                    : `Send request · ${naira(cost)}`}
               </button>
             </motion.div>
           </motion.div>
@@ -282,10 +384,18 @@ export function TrashFilledPanel({
   );
 }
 
-function LockedCta({ reason, payMonth }: { reason: "register" | "renew" | "suspended" | null; payMonth?: string }) {
+function LockedCta({
+  reason,
+  balance,
+  binPrice,
+}: {
+  reason: "register" | "topup" | "suspended" | null;
+  balance: number;
+  binPrice: number;
+}) {
   const text =
-    reason === "renew"
-      ? `Your button is off because ${payMonth ?? "this month"} isn't paid yet.`
+    reason === "topup"
+      ? `Your button is off because your credit (${naira(balance)}) is less than one trash can (${naira(binPrice)}).`
       : reason === "suspended"
         ? "Your account is suspended. Contact AreaCare support."
         : "Your button turns on once your home is registered.";
@@ -310,8 +420,8 @@ function LockedCta({ reason, payMonth }: { reason: "register" | "renew" | "suspe
       </button>
       <p className="max-w-xs text-sm font-medium text-forest-900">{text}</p>
       {reason !== "suspended" && (
-        <Link href="/membership" className="btn-vest btn-sm">
-          {reason === "renew" ? `Pay for ${payMonth ?? "this month"}` : "Register now"}
+        <Link href="/wallet" className="btn-vest btn-sm">
+          {reason === "topup" ? "Top up credit" : "Register now"}
         </Link>
       )}
     </div>

@@ -21,6 +21,12 @@ export function startOfLagosDay(now = new Date()) {
   return new Date(Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), lagos.getUTCDate()) - 60 * 60_000);
 }
 
+/** Midnight on the 1st of this month in Lagos. */
+export function startOfLagosMonth(now = new Date()) {
+  const lagos = new Date(now.getTime() + 60 * 60_000);
+  return new Date(Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), 1) - 60 * 60_000);
+}
+
 export async function boardPickups(user: User, scope: "open" | "recent" | "cleared" = "open") {
   const zoneIds = await visibleZoneIds(user);
   if (zoneIds && zoneIds.length === 0) return [];

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Navigation, Phone, RefreshCw, RotateCcw } from "lucide-react";
+import { CheckCircle2, Navigation, Phone, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import type { AddressSnapshot, PickupStatus } from "@/db/schema";
 import { api } from "@/lib/client";
-import { addressLine, dateTime, mapsLink, timeAgo } from "@/lib/format";
+import { addressLine, binsLabel, dateTime, mapsLink, timeAgo } from "@/lib/format";
 import { Map, type MapPin } from "@/components/map/Map";
 import { StatusChip } from "@/components/StatusChip";
 import { PickupActions } from "./PickupActions";
@@ -19,6 +19,7 @@ export type BoardPickup = {
   lng: number | null;
   locationSource: string;
   note: string | null;
+  binCount: number;
   address: AddressSnapshot;
   createdAt: string;
   team: { id: string; name: string } | null;
@@ -107,7 +108,7 @@ export function LiveBoard({
       id: p.id,
       lat: p.lat!,
       lng: p.lng!,
-      label: `${p.address.name} — ${p.address.street ?? ""}`,
+      label: `${p.address.name} — ${binsLabel(p.binCount ?? 1)} — ${p.address.street ?? ""}`,
       href: `/ops/requests/${p.id}`,
       tone: p.status === "PENDING" || p.reopenedCount > 0 ? "ember" : p.status === "EN_ROUTE" || p.status === "COMPLETED" ? "forest" : "vest",
     }));
@@ -178,7 +179,12 @@ export function LiveBoard({
                       </Link>
                       <p className="text-sm text-moss">{addressLine(p.address) || "No address"}</p>
                     </div>
-                    <StatusChip status={p.status} className="shrink-0" />
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <StatusChip status={p.status} />
+                      <span className="chip bg-vest-500 text-forest-900">
+                        <Trash2 size={13} /> {binsLabel(p.binCount ?? 1)}
+                      </span>
+                    </div>
                   </div>
 
                   {p.reopenedCount > 0 && p.status !== "COMPLETED" && p.status !== "AWAITING_CONFIRMATION" && (

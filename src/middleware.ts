@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
-const PROTECTED = ["/dashboard", "/onboarding", "/membership", "/payments", "/soakaway", "/notifications", "/ops", "/admin"];
+const PROTECTED = ["/dashboard", "/onboarding", "/membership", "/wallet", "/payments", "/soakaway", "/notifications", "/ops", "/admin"];
 const STAFF_ONLY = ["/ops"];
 const SUPER_ONLY = ["/admin"];
 
@@ -36,6 +36,7 @@ export const config = {
     "/dashboard/:path*",
     "/onboarding/:path*",
     "/membership/:path*",
+    "/wallet/:path*",
     "/payments/:path*",
     "/soakaway/:path*",
     "/notifications/:path*",

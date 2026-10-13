@@ -8,12 +8,32 @@ import { RecheckButton } from "../PayButton";
 
 export type PaymentRow = Pick<
   Payment,
-  "id" | "txRef" | "type" | "amount" | "months" | "status" | "periodStart" | "periodEnd" | "createdAt" | "verifiedAt" | "flwTransactionId"
+  | "id"
+  | "txRef"
+  | "type"
+  | "amount"
+  | "months"
+  | "creditAmount"
+  | "status"
+  | "periodStart"
+  | "periodEnd"
+  | "createdAt"
+  | "verifiedAt"
+  | "flwTransactionId"
 > & { user?: { id: string; name: string; email: string } };
 
 export function paymentLabel(p: Pick<Payment, "type" | "months">) {
   if (p.type === "SOAKAWAY") return "Soakaway evacuation";
+  if (p.type === "TOPUP") return "Credit top-up";
   return p.type === "REGISTRATION" ? "Registration" : `Monthly dues × ${p.months}`;
+}
+
+/** One line on what a payment gave the member. */
+export function paymentDetail(p: Pick<Payment, "type" | "creditAmount" | "periodStart" | "periodEnd">) {
+  if (p.type === "SOAKAWAY") return "One-off service";
+  if (p.type === "MONTHLY") return p.periodEnd ? periodLabel(p.periodStart, p.periodEnd) : "Old monthly plan";
+  if (p.type === "REGISTRATION") return p.creditAmount ? `Includes ${naira(p.creditAmount)} credit` : "Home registration";
+  return p.creditAmount ? `+${naira(p.creditAmount)} credit` : "";
 }
 
 /**
@@ -51,7 +71,7 @@ export function PaymentsTable({
                 </p>
                 <p className="text-xs text-moss">
                   {dateTime(p.verifiedAt ?? p.createdAt)}
-                  {p.periodEnd ? ` · ${periodLabel(p.periodStart, p.periodEnd)}` : ""}
+                  {paymentDetail(p) ? ` · ${paymentDetail(p)}` : ""}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-[11px] text-moss">{p.txRef}</p>
               </div>
@@ -83,7 +103,7 @@ export function PaymentsTable({
             <th className="px-4 py-3 font-semibold">Date</th>
             {showMember && <th className="px-4 py-3 font-semibold">Member</th>}
             <th className="px-4 py-3 font-semibold">For</th>
-            <th className="px-4 py-3 font-semibold">Covers</th>
+            <th className="px-4 py-3 font-semibold">Details</th>
             <th className="px-4 py-3 text-right font-semibold">Amount</th>
             <th className="px-4 py-3 font-semibold">Status</th>
             <th className="px-4 py-3 font-semibold">Reference</th>
@@ -111,7 +131,7 @@ export function PaymentsTable({
                 {isManualPayment(p) && <span className="mt-0.5 block text-xs text-moss">Cash / transfer</span>}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-moss">
-                {periodLabel(p.periodStart, p.periodEnd)}
+                {paymentDetail(p) || "—"}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right font-display text-base font-bold">{naira(p.amount)}</td>
               <td className="whitespace-nowrap px-4 py-3">

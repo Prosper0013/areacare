@@ -76,3 +76,5 @@ export const mapsLink = (lat: number, lng: number) =>
 export const isManualPayment = (p: { txRef: string }) => p.txRef.startsWith("AC-CASH");
 export const paymentMethod = (p: { txRef: string }) =>
   isManualPayment(p) ? "Cash / transfer (recorded by admin)" : "Flutterwave";
+
+export const binsLabel = (n: number) => `${n} trash can${n === 1 ? "" : "s"}`;
