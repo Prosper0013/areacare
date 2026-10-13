@@ -12,14 +12,14 @@ import { cleanDbUrl } from "../src/db/url";
 import * as schema from "../src/db/schema";
 
 const ZONES = [
-  ["Wuse", "Wuse I & II, Zone 1–7"],
-  ["Garki", "Garki I & II, Area 1–11"],
-  ["Maitama", "Maitama and Mpape axis"],
-  ["Asokoro", "Asokoro and Guzape"],
-  ["Gwarinpa", "Gwarinpa estate and Life Camp"],
-  ["Jabi & Utako", "Jabi, Utako, Wuye"],
-  ["Kubwa", "Kubwa, Dutse, Byazhin"],
-  ["Lugbe & Airport Road", "Lugbe, Kyami, Pyakasa"],
+  ["Wuse", "Wuse, Wuse II, Zone 1, Zone 2, Zone 3, Zone 4, Zone 5, Zone 6, Zone 7"],
+  ["Garki", "Garki, Garki II, Area 1, Area 2, Area 3, Area 7, Area 8, Area 10, Area 11"],
+  ["Maitama", "Maitama, Mpape"],
+  ["Asokoro", "Asokoro, Guzape"],
+  ["Gwarinpa", "Gwarinpa, Life Camp, Dawaki"],
+  ["Jabi & Utako", "Jabi, Utako, Wuye, Mabushi"],
+  ["Kubwa", "Kubwa, Dutse, Byazhin, Bwari"],
+  ["Lugbe & Airport Road", "Lugbe, Kyami, Pyakasa, Airport Road"],
 ];
 
 async function main() {

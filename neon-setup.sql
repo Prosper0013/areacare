@@ -1,20 +1,17 @@
 -- ════════════════════════════════════════════════════════════════════
---  AreaCare — one-time database setup for Neon (or any PostgreSQL)
+--  AreaCare — one-time database setup for a NEW, EMPTY Neon database
 --
---  How to use:
 --    1. Neon console → your project → SQL Editor (database: neondb)
 --    2. Paste this whole file and click Run.
---    3. Sign up in the app with the email you set as SUPER_ADMIN_EMAIL in
---       Vercel — that account becomes the super admin automatically.
+--    3. Sign up in the app with your SUPER_ADMIN_EMAIL — that account
+--       becomes the super admin automatically.
 --
---  Run it once, on an empty database. Running it twice will fail with
---  "already exists" errors (nothing gets damaged).
+--  Already set up an earlier version? Use neon-update.sql instead.
 -- ════════════════════════════════════════════════════════════════════
 
--- ── Tables ──────────────────────────────────────────────────────────
 CREATE TYPE "public"."membership_status" AS ENUM('UNREGISTERED', 'ACTIVE', 'OVERDUE', 'SUSPENDED');
 CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'SUCCESSFUL', 'FAILED');
-CREATE TYPE "public"."payment_type" AS ENUM('REGISTRATION', 'MONTHLY');
+CREATE TYPE "public"."payment_type" AS ENUM('REGISTRATION', 'MONTHLY', 'SOAKAWAY');
 CREATE TYPE "public"."pickup_status" AS ENUM('PENDING', 'ACKNOWLEDGED', 'EN_ROUTE', 'AWAITING_CONFIRMATION', 'COMPLETED', 'CANCELLED');
 CREATE TYPE "public"."role" AS ENUM('USER', 'STAFF', 'ADMIN', 'SUPER_ADMIN');
 CREATE TABLE "notifications" (
@@ -166,45 +163,73 @@ ALTER TABLE "pickup_requests" ADD COLUMN "reopen_note" text;
 ALTER TABLE "pickup_requests" ADD COLUMN "reopened_at" timestamp with time zone;
 ALTER TABLE "pickup_requests" ADD CONSTRAINT "pickup_requests_cleared_by_id_users_id_fk" FOREIGN KEY ("cleared_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
 
--- ── Mark migrations as applied (so `npm run db:migrate` skips them) ──
-CREATE SCHEMA IF NOT EXISTS "drizzle";
-CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
-  "id" SERIAL PRIMARY KEY,
-  "hash" text NOT NULL,
-  "created_at" bigint
+CREATE TYPE "public"."soakaway_status" AS ENUM('AWAITING_PAYMENT', 'PENDING_APPROVAL', 'SCHEDULED', 'COMPLETED', 'REJECTED', 'CANCELLED');
+CREATE TABLE "soakaway_bookings" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"status" "soakaway_status" DEFAULT 'AWAITING_PAYMENT' NOT NULL,
+	"amount" integer NOT NULL,
+	"preferred_date" text,
+	"preferred_time" text,
+	"note" text,
+	"address" jsonb NOT NULL,
+	"lat" double precision,
+	"lng" double precision,
+	"zone_id" text,
+	"paid_at" timestamp with time zone,
+	"scheduled_for" timestamp with time zone,
+	"admin_note" text,
+	"approved_by_id" text,
+	"approved_at" timestamp with time zone,
+	"completed_at" timestamp with time zone,
+	"rejected_at" timestamp with time zone,
+	"reject_reason" text,
+	"cancelled_at" timestamp with time zone,
+	"reminded_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") VALUES ('070ad5c07472e889a21c62120bf20ab239d829e44fe21bde8dd26e9e21fd1e39', 1791886365252);
-INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") VALUES ('3071cb3b0760df98034ce761be238bf25b653e8c39a644e8a0c46cde070b9062', 1791889780822);
 
--- ── Starting data ───────────────────────────────────────────────────
--- Fees in naira (change any time in the app under Fees)
+ALTER TABLE "payments" ADD COLUMN "booking_id" text;
+ALTER TABLE "soakaway_bookings" ADD CONSTRAINT "soakaway_bookings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "soakaway_bookings" ADD CONSTRAINT "soakaway_bookings_zone_id_zones_id_fk" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "soakaway_bookings" ADD CONSTRAINT "soakaway_bookings_approved_by_id_users_id_fk" FOREIGN KEY ("approved_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+CREATE INDEX "soakaway_status_idx" ON "soakaway_bookings" USING btree ("status","created_at");
+CREATE INDEX "soakaway_user_idx" ON "soakaway_bookings" USING btree ("user_id","created_at");
+ALTER TABLE "payments" ADD CONSTRAINT "payments_booking_id_soakaway_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."soakaway_bookings"("id") ON DELETE set null ON UPDATE no action;
+
+-- Mark migrations as applied (so `npm run db:migrate` skips them)
+CREATE SCHEMA IF NOT EXISTS "drizzle";
+CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" ("id" SERIAL PRIMARY KEY, "hash" text NOT NULL, "created_at" bigint);
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '070ad5c07472e889a21c62120bf20ab239d829e44fe21bde8dd26e9e21fd1e39', 1791886365252 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791886365252);
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '3071cb3b0760df98034ce761be238bf25b653e8c39a644e8a0c46cde070b9062', 1791889780822 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791889780822);
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '297925d91a8c3ce5f540c0c5c32770ef23a6f8b7988e9c548174ce9dd2c686a9', 1791894826895 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791894826895);
+
+-- Prices in naira (change any time in the app under Prices)
 INSERT INTO "settings" ("key", "value") VALUES
   ('registration_fee', '5000'),
-  ('monthly_fee', '2000')
+  ('monthly_fee', '2000'),
+  ('soakaway_fee', '25000')
 ON CONFLICT ("key") DO NOTHING;
 
--- Service zones (edit or add more later under Teams & zones)
+-- Service areas (edit or add more later under Teams & areas)
 INSERT INTO "zones" ("id", "name", "description") VALUES
-  (gen_random_uuid()::text, 'Wuse', 'Wuse I & II, Zone 1–7'),
-  (gen_random_uuid()::text, 'Garki', 'Garki I & II, Area 1–11'),
-  (gen_random_uuid()::text, 'Maitama', 'Maitama and Mpape axis'),
-  (gen_random_uuid()::text, 'Asokoro', 'Asokoro and Guzape'),
-  (gen_random_uuid()::text, 'Gwarinpa', 'Gwarinpa estate and Life Camp'),
-  (gen_random_uuid()::text, 'Jabi & Utako', 'Jabi, Utako, Wuye'),
-  (gen_random_uuid()::text, 'Kubwa', 'Kubwa, Dutse, Byazhin'),
-  (gen_random_uuid()::text, 'Lugbe & Airport Road', 'Lugbe, Kyami, Pyakasa')
+  (gen_random_uuid()::text, 'Wuse', 'Wuse, Wuse II, Zone 1, Zone 2, Zone 3, Zone 4, Zone 5, Zone 6, Zone 7'),
+  (gen_random_uuid()::text, 'Garki', 'Garki, Garki II, Area 1, Area 2, Area 3, Area 7, Area 8, Area 10, Area 11'),
+  (gen_random_uuid()::text, 'Maitama', 'Maitama, Mpape'),
+  (gen_random_uuid()::text, 'Asokoro', 'Asokoro, Guzape'),
+  (gen_random_uuid()::text, 'Gwarinpa', 'Gwarinpa, Life Camp, Dawaki'),
+  (gen_random_uuid()::text, 'Jabi & Utako', 'Jabi, Utako, Wuye, Mabushi'),
+  (gen_random_uuid()::text, 'Kubwa', 'Kubwa, Dutse, Byazhin, Bwari'),
+  (gen_random_uuid()::text, 'Lugbe & Airport Road', 'Lugbe, Kyami, Pyakasa, Airport Road')
 ON CONFLICT ("name") DO NOTHING;
 
--- A starter crew that covers every zone
+-- A starter crew that covers every area
 INSERT INTO "teams" ("id", "name", "description")
-VALUES (gen_random_uuid()::text, 'Central crew', 'Default crew covering every zone')
+VALUES (gen_random_uuid()::text, 'Central crew', 'Default crew covering every area')
 ON CONFLICT ("name") DO NOTHING;
-
 INSERT INTO "team_zones" ("team_id", "zone_id")
 SELECT t."id", z."id" FROM "teams" t CROSS JOIN "zones" z WHERE t."name" = 'Central crew'
 ON CONFLICT DO NOTHING;
 
--- ── Optional ────────────────────────────────────────────────────────
--- If you already created an account before setting SUPER_ADMIN_EMAIL,
--- remove the two dashes below, put in your email, and run just that line:
+-- Optional: promote an existing account to super admin
 -- UPDATE "users" SET "role" = 'SUPER_ADMIN' WHERE "email" = 'you@example.com';

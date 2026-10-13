@@ -10,10 +10,10 @@ Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Dri
 
 | Who | What they can do |
 | --- | --- |
-| **Member** | Sign up → add house details and pin their gate on a map → pay ₦5,000 registration (covers the first month) → press **Trash filled** → watch the request move from *sent* to *crew assigned* to *on the way* to *collected* → pay monthly dues (1, 3, 6 or 12 months at a time). **Payments page**: total paid, paid-through date, next payment due, full history with filters, a printable receipt (save as PDF) for every payment, and recent payments on the home dashboard. |
+| **Member** | Sign up → tap **Use my current location** (the address and service area fill in automatically) or type the house details → pay ₦5,000 registration (covers the current calendar month) → press **Trash filled** → watch the request move from *sent* to *crew assigned* to *on the way* to *collected* → before each month ends, pay ₦2,000 for the next month (or 1, 3, 6 or 12 months ahead). If a month isn't paid, the Trash filled button turns grey and locked until it is. → book a **soakaway evacuation**, pay for it online, and get the approved date and time. **Payments page**: total paid, paid-through date, next payment due, full history with filters, a printable receipt (save as PDF) for every payment, and recent payments on the home dashboard. |
 | **Crew (staff)** | Live board of open requests in the zones their team covers, with map, address, landmark, notes, **Directions** (Google Maps) and **Call** buttons. Accept → Start trip → Mark collected. |
 | **Management (admin)** | Same live board across **all** zones; receives every Trash filled alert; can cancel requests. |
-| **Super admin** | Everything above, plus: **Overview** (open requests, active/overdue members, money received this month, 14-day request chart, money received per month, whose dues end this week, who is overdue). **Payments** (every payment from every member, totals, pending and failed checkouts, filters by name/reference/status/type/date, **CSV export** for accounting). **Member profiles** (contact, house and map pin, membership dates, total paid, all payments and receipts, all pickup requests, change role, suspend, and **record a cash or bank-transfer payment**, which extends membership and gives the member a receipt). Plus teams, zones, roles and fees. |
+| **Super admin** | Everything above, plus: **Overview** (open requests, active/overdue members, money received this month, 14-day request chart, money received per month, whose dues end this week, who is overdue). **Payments** (every payment from every member, totals, pending and failed checkouts, filters by name/reference/status/type/date, **CSV export** for accounting). **Member profiles** (contact, house and map pin, membership dates, total paid, all payments and receipts, all pickup requests, change role, suspend, and **record a cash or bank-transfer payment**, which extends membership and gives the member a receipt). **Soakaway bookings** (approve paid bookings with a date and time, reschedule, decline with a reason, mark completed). Plus teams, service areas (add, rename, list neighbourhoods), roles and prices (registration, monthly dues, soakaway evacuation). |
 
 **Pickup flow, start to finish:**
 
@@ -28,6 +28,15 @@ Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Dri
 6. If the member still hasn't answered after 12 reminders (~6 hours), management gets one alert to follow up by phone, and can **Confirm for member** from the request page.
 
 The member can't raise a new request until they've answered, so every pickup ends with a clear yes or no. "Cleared · confirmed" (with who confirmed and when) shows on the member's home screen and history, on the crew board under **Cleared today**, on the request page, on the member's profile, and as a count on the admin Overview.
+
+**Soakaway evacuation:**
+
+1. The member books from **Soakaway** (or the home page), picks a preferred day and time window, and pays the price the super admin set.
+2. Management gets an alert. Under **Soakaway → To approve**, an admin chooses the date and time (and can add a message) and approves.
+3. The member is notified immediately with the date and time, reminded on the morning of the visit, and told when it's marked completed.
+4. An admin can also reschedule, or decline with a reason. Refunds for declined bookings are made from the Flutterwave dashboard.
+
+Only management (Admin and Super admin) can approve, schedule or decline. Only the super admin can change the price.
 
 **Notifications** go out three ways when someone presses Trash filled:
 1. In-app alert bell (refreshes every 10–20 s, with a sound and pop-up).
@@ -144,12 +153,18 @@ That switches on both workflows: confirmation reminders every 30 minutes, and th
 
 ## Updating an existing deployment
 
-If you already deployed an earlier version against a database that has data in it, run `npm run db:migrate` once after pulling the new code. It adds any new columns; nothing is deleted. (A brand-new Neon database set up with `neon-setup.sql` is already up to date.)
+- **Neon, set up with an earlier `neon-setup.sql`:** paste **`neon-update.sql`** into Neon's SQL Editor and run it once. It adds the soakaway tables and default price; nothing is deleted.
+- **Any other existing database:** run `npm run db:migrate` once after pulling the new code.
+- **Brand-new database:** `neon-setup.sql` already includes everything.
 
 ## How payments work
 
-- **Registration** (default ₦5,000) activates the home and covers the first month.
-- **Monthly dues** (default ₦2,000) extend membership month by month; paying early adds to the current end date.
+Billing follows calendar months (Lagos time):
+
+- **Registration** (default ₦5,000) activates the home and covers the month the member joins, up to its last day.
+- **Monthly dues** (default ₦2,000) are paid before the month ends to cover the next month. Paying 3, 6 or 12 months adds that many following months. The member is reminded 3 days before the month ends.
+- If a month isn't paid, the member's **Trash filled** button is greyed out and locked; paying covers the current month and switches it back on.
+- **Soakaway evacuation** (default ₦25,000, set by the super admin under **Prices**) is a one-off payment per booking and doesn't affect membership.
 - After paying, Flutterwave sends the member back to `/api/payments/callback`, and also calls the webhook. Both **re-verify the transaction with Flutterwave's API** (status, amount, currency and reference must match) before anything is credited, and crediting is idempotent, so a payment can never be applied twice.
 - A slow bank transfer shows as *Pending* with a **Check again** button.
 
