@@ -32,7 +32,9 @@ async function main() {
     .insert(schema.settings)
     .values([
       { key: "registration_fee", value: process.env.DEFAULT_REGISTRATION_FEE ?? "5000" },
-      { key: "monthly_fee", value: process.env.DEFAULT_MONTHLY_FEE ?? "2000" },
+      { key: "registration_credit", value: process.env.DEFAULT_REGISTRATION_CREDIT ?? "2000" },
+      { key: "bin_price", value: process.env.DEFAULT_BIN_PRICE ?? "500" },
+      { key: "soakaway_fee", value: process.env.DEFAULT_SOAKAWAY_FEE ?? "25000" },
     ])
     .onConflictDoNothing();
 

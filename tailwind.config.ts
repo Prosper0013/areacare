@@ -18,6 +18,7 @@ const config: Config = {
         },
         canvas: "#F3F6F2",
         vest: {
+          600: "#D9A404",
           500: "#F2B705",
           400: "#FFCB2E",
           100: "#FFF3C4",
@@ -48,9 +49,14 @@ const config: Config = {
           "0%": { transform: "scale(.9)", opacity: ".7" },
           "100%": { transform: "scale(1.5)", opacity: "0" },
         },
+        "pop-in": {
+          "0%": { transform: "translateY(8px) scale(.85)", opacity: "0" },
+          "100%": { transform: "none", opacity: "1" },
+        },
       },
       animation: {
         "pulse-ring": "pulse-ring 2s cubic-bezier(.2,.6,.3,1) infinite",
+        "pop-in": "pop-in .45s cubic-bezier(.2,.8,.3,1.2) both",
       },
     },
   },

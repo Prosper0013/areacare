@@ -11,7 +11,7 @@
 
 CREATE TYPE "public"."membership_status" AS ENUM('UNREGISTERED', 'ACTIVE', 'OVERDUE', 'SUSPENDED');
 CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'SUCCESSFUL', 'FAILED', 'CANCELLED');
-CREATE TYPE "public"."payment_type" AS ENUM('REGISTRATION', 'MONTHLY', 'SOAKAWAY');
+CREATE TYPE "public"."payment_type" AS ENUM('REGISTRATION', 'MONTHLY', 'SOAKAWAY', 'TOPUP');
 CREATE TYPE "public"."pickup_status" AS ENUM('PENDING', 'ACKNOWLEDGED', 'EN_ROUTE', 'AWAITING_CONFIRMATION', 'COMPLETED', 'CANCELLED');
 CREATE TYPE "public"."role" AS ENUM('USER', 'STAFF', 'ADMIN', 'SUPER_ADMIN');
 CREATE TABLE "notifications" (
@@ -197,6 +197,48 @@ CREATE INDEX "soakaway_status_idx" ON "soakaway_bookings" USING btree ("status",
 CREATE INDEX "soakaway_user_idx" ON "soakaway_bookings" USING btree ("user_id","created_at");
 ALTER TABLE "payments" ADD CONSTRAINT "payments_booking_id_soakaway_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."soakaway_bookings"("id") ON DELETE set null ON UPDATE no action;
 
+-- Pay-as-you-go credit
+DO $$ BEGIN
+  CREATE TYPE "public"."wallet_entry_type" AS ENUM('REGISTRATION_CREDIT', 'TOPUP', 'PICKUP_CHARGE', 'PICKUP_REFUND', 'ADJUSTMENT');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE TABLE IF NOT EXISTS "wallet_entries" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"type" "wallet_entry_type" NOT NULL,
+	"amount" integer NOT NULL,
+	"balance_after" integer NOT NULL,
+	"pickup_id" text,
+	"payment_id" text,
+	"note" text,
+	"created_by_id" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "credit_amount" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "pickup_requests" ADD COLUMN IF NOT EXISTS "bin_count" integer DEFAULT 1 NOT NULL;
+ALTER TABLE "pickup_requests" ADD COLUMN IF NOT EXISTS "bin_price" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "pickup_requests" ADD COLUMN IF NOT EXISTS "charge" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "pickup_requests" ADD COLUMN IF NOT EXISTS "refunded_at" timestamp with time zone;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "credit_balance" integer DEFAULT 0 NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallet_entries_user_id_users_id_fk') THEN
+    ALTER TABLE "wallet_entries" ADD CONSTRAINT "wallet_entries_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallet_entries_pickup_id_pickup_requests_id_fk') THEN
+    ALTER TABLE "wallet_entries" ADD CONSTRAINT "wallet_entries_pickup_id_pickup_requests_id_fk" FOREIGN KEY ("pickup_id") REFERENCES "public"."pickup_requests"("id") ON DELETE set null ON UPDATE no action;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallet_entries_payment_id_payments_id_fk') THEN
+    ALTER TABLE "wallet_entries" ADD CONSTRAINT "wallet_entries_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE set null ON UPDATE no action;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallet_entries_created_by_id_users_id_fk') THEN
+    ALTER TABLE "wallet_entries" ADD CONSTRAINT "wallet_entries_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_credit_balance_nonneg') THEN
+    ALTER TABLE "users" ADD CONSTRAINT "users_credit_balance_nonneg" CHECK ("credit_balance" >= 0);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS "wallet_user_idx" ON "wallet_entries" USING btree ("user_id","created_at");
+
 -- Mark migrations as applied (so `npm run db:migrate` skips them)
 CREATE SCHEMA IF NOT EXISTS "drizzle";
 CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" ("id" SERIAL PRIMARY KEY, "hash" text NOT NULL, "created_at" bigint);
@@ -204,11 +246,13 @@ INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '070a
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '3071cb3b0760df98034ce761be238bf25b653e8c39a644e8a0c46cde070b9062', 1791889780822 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791889780822);
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '297925d91a8c3ce5f540c0c5c32770ef23a6f8b7988e9c548174ce9dd2c686a9', 1791894826895 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791894826895);
 INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT '01745902ef587ea6365e442cd62205de0d8a5f62bed0df5bec5ea20d7b88ee13', 1791896546033 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791896546033);
+INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") SELECT 'b2701c91d2caa05beb397d84ce5d617fc9371c4c322c691b64629cac4a99eb34', 1791899933348 WHERE NOT EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1791899933348);
 
 -- Prices in naira (change any time in the app under Prices)
 INSERT INTO "settings" ("key", "value") VALUES
-  ('registration_fee', '5000'),
-  ('monthly_fee', '2000'),
+  ('registration_fee', '5000'),     -- paid once to register a home
+  ('registration_credit', '2000'),  -- part of the registration fee given back as pickup credit
+  ('bin_price', '500'),             -- charged from credit per filled trash can
   ('soakaway_fee', '25000')
 ON CONFLICT ("key") DO NOTHING;
 

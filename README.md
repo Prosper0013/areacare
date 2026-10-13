@@ -1,6 +1,6 @@
 # AreaCare
 
-On-demand household waste pickup. Members register their home, pay a registration fee and monthly dues through **Flutterwave**, and press **Trash filled** when their bin is full. Management and the crew assigned to that area are alerted instantly with the member's house details and live location.
+On-demand household waste pickup. Members register their home, pay a one-time registration fee through **Flutterwave** (part of it becomes pickup credit), then pay as they go for each trash can collected, and press **Trash filled** when their bin is full. Management and the crew assigned to that area are alerted instantly with the member's house details and live location.
 
 Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Drizzle ORM and PostgreSQL. Designed to run free on **Vercel + Neon** (or Supabase).
 
@@ -10,14 +10,14 @@ Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Dri
 
 | Who | What they can do |
 | --- | --- |
-| **Member** | Sign up → tap **Use my current location** (the address and service area fill in automatically) or type the house details → pay ₦5,000 registration (covers the current calendar month) → press **Trash filled** → watch the request move from *sent* to *crew assigned* to *on the way* to *collected* → before each month ends, pay ₦2,000 for the next month (or 1, 3, 6 or 12 months ahead). If a month isn't paid, the Trash filled button turns grey and locked until it is. → book a **soakaway evacuation**, pay for it online, and get the approved date and time. **Payments page**: total paid, paid-through date, next payment due, full history with filters, a printable receipt (save as PDF) for every payment, and recent payments on the home dashboard. |
-| **Crew (staff)** | Live board of open requests in the zones their team covers, with map, address, landmark, notes, **Directions** (Google Maps) and **Call** buttons. Accept → Start trip → Mark collected. |
+| **Member** | Sign up → tap **Use my current location** (the address and service area fill in automatically) or type the house details → pay ₦5,000 registration (₦2,000 of it becomes pickup credit) → press **Trash filled**, choose how many trash cans are full (₦500 each comes off the credit) → watch the request move from *sent* to *crew assigned* to *on the way* to *collected* → **top up** credit any time on the **Credit** page. When credit is below the price of one can, the Trash filled button turns grey and locked until they top up. Cancelling before the crew comes refunds the charge. → book a **soakaway evacuation**, pay for it online, and get the approved date and time. **Credit page**: balance, how many cans it covers, top-up, and every credit movement. **Payments page**: total paid, credit left, full history with filters, a printable receipt (save as PDF) for every payment, and recent payments on the home dashboard. |
+| **Crew (staff)** | Live board of open requests in the zones their team covers, with map, address, landmark, notes, **Directions** (Google Maps) and **Call** buttons. Each request shows how many trash cans to collect. Accept → Start trip → Report cleared. |
 | **Management (admin)** | Same live board across **all** zones; receives every Trash filled alert; can cancel requests. |
-| **Super admin** | Everything above, plus: **Overview** (open requests, active/overdue members, money received this month, 14-day request chart, money received per month, whose dues end this week, who is overdue). **Payments** (every payment from every member, totals, pending and failed checkouts, filters by name/reference/status/type/date, **CSV export** for accounting). **Member profiles** (contact, house and map pin, membership dates, total paid, all payments and receipts, all pickup requests, change role, suspend, and **record a cash or bank-transfer payment**, which extends membership and gives the member a receipt). **Soakaway bookings** (approve paid bookings with a date and time, reschedule, decline with a reason, mark completed). Plus teams, service areas (add, rename, list neighbourhoods), roles and prices (registration, monthly dues, soakaway evacuation). |
+| **Super admin** | Everything above, plus: **Overview** (open requests, members out of credit, unused member credit, cans collected this month, money received this month, 14-day request chart, money received per month, members running low, members out of credit). **Payments** (every payment from every member, totals, pending and failed checkouts, filters by name/reference/status/type/date, **CSV export** for accounting). **Member profiles** (contact, house and map pin, credit balance and full credit history, total paid, all payments and receipts, all pickup requests with cans and charges, change role, suspend, **record a cash or bank-transfer payment** (registration or top-up), and **adjust credit** up or down with a reason). **Soakaway bookings** (approve paid bookings with a date and time, reschedule, decline with a reason, mark completed). Plus teams, service areas (add, rename, list neighbourhoods), roles and prices (registration fee, starting credit, price per trash can, soakaway evacuation). |
 
 **Pickup flow, start to finish:**
 
-1. Member presses **Trash filled** → management and the zone's crew are alerted.
+1. Member presses **Trash filled** and chooses the number of full trash cans → the cost is taken from their credit → management and the zone's crew are alerted with the can count.
 2. Crew taps **Accept**, then **Start trip** → the member is told the crew is on the way.
 3. At the house, the crew taps **Report cleared** (optionally adding a note like "emptied 2 bags").
 4. The member is asked **"Has your bin been cleared?"** and keeps getting buzzed until they answer:
@@ -45,8 +45,9 @@ Only management (Admin and Super admin) can approve, schedule or decline. Only t
 
 **Daily cron job** (`/api/cron/daily`, runs 6:00 UTC via Vercel Cron):
 - Keeps the free database awake (Supabase pauses free projects after 7 idle days).
-- Moves members whose dues have lapsed to *overdue* and notifies them.
-- Sends a reminder 3 days before dues run out.
+- Cancels checkouts still unpaid after 3 days.
+- Sends confirmation and soakaway reminders.
+(Members are told to top up straight away when a pickup leaves them with less than one can's worth of credit.)
 
 A backup GitHub Actions workflow (`.github/workflows/keep-alive.yml`) pings the same job every 3 days.
 
@@ -143,8 +144,8 @@ That switches on both workflows: confirmation reminders every 30 minutes, and th
 2. **Teams & zones** — create a team per area (e.g. *Gwarinpa crew*), tick the zones it covers.
 3. Crew members **sign up normally**, then on **People** change their role to *Crew* and tap the team(s) they belong to. Management staff get the *Management* role.
 4. Ask every crew member to open the app on their phone, log in, and tap **Turn on alerts**. On iPhone, they should first use *Share → Add to Home Screen* (iOS only allows web push for installed apps).
-5. Change prices any time under **Fees**. New prices apply to the next payment; months already paid aren't affected.
-6. If a member pays you in cash or by direct transfer, open their profile from **People** and use **Record cash payment**. It shows in their payment history and in your Payments totals, marked as cash.
+5. Change prices any time under **Prices** (registration fee, starting credit, price per trash can, soakaway). New prices apply to the next registration or pickup; credit already in members' accounts isn't touched, and refunds always give back exactly what was charged.
+6. If a member pays you in cash or by direct transfer, open their profile from **People** and use **Record cash payment** — it registers them or adds the amount to their credit, and shows in your Payments totals marked as cash. Use **Adjust credit** for goodwill or corrections (e.g. the crew found more cans than were declared).
 7. For accounting, use **Payments → Export CSV**. The export follows whatever filters you've applied (e.g. one month, paid only).
 
 **Who gets alerted:** all Management and Super admins, plus every crew member on a team that covers the member's zone. If no team covers a zone, every crew member is alerted so nothing is missed — the Teams & zones page flags uncovered zones in red.
@@ -153,18 +154,20 @@ That switches on both workflows: confirmation reminders every 30 minutes, and th
 
 ## Updating an existing deployment
 
-- **Neon, set up with an earlier `neon-setup.sql`:** paste **`neon-update.sql`** into Neon's SQL Editor and run it once. It adds the soakaway tables and default price; nothing is deleted.
+- **Neon, set up with an earlier `neon-setup.sql`:** paste **`neon-update.sql`** into Neon's SQL Editor and run it once. It adds pay-as-you-go credit (plus soakaway bookings if you don't have them yet); nothing is deleted. It's safe to run more than once. At the bottom there's an optional block that gives members who registered under the old monthly plan ₦2,000 starting credit.
 - **Any other existing database:** run `npm run db:migrate` once after pulling the new code.
 - **Brand-new database:** `neon-setup.sql` already includes everything.
 
 ## How payments work
 
-Billing follows calendar months (Lagos time):
+Billing is **pay as you go**:
 
-- **Registration** (default ₦5,000) activates the home and covers the month the member joins, up to its last day.
-- **Monthly dues** (default ₦2,000) are paid before the month ends to cover the next month. Paying 3, 6 or 12 months adds that many following months. The member is reminded 3 days before the month ends.
-- If a month isn't paid, the member's **Trash filled** button is greyed out and locked; paying covers the current month and switches it back on.
-- **Soakaway evacuation** (default ₦25,000, set by the super admin under **Prices**) is a one-off payment per booking and doesn't affect membership.
+- **Registration** (default ₦5,000) registers the home. Part of it (default ₦2,000) goes straight into the member's **credit**.
+- Each **Trash filled** request costs *number of trash cans × price per can* (default ₦500), taken from credit the moment the request is sent. The member can't send it if their credit doesn't cover it.
+- If the request is cancelled (by the member before a crew accepts it, or by management at any point) the exact amount charged is refunded to credit.
+- **Top-ups** of any amount from one can's price up to ₦500,000 add credit. Credit never expires.
+- Every movement is recorded in a credit ledger (starting credit, top-ups, pickups, refunds, admin adjustments) that the member and the super admin can both see.
+- **Soakaway evacuation** (default ₦25,000, set by the super admin under **Prices**) is a one-off payment per booking and doesn't touch credit.
 - After paying, Flutterwave sends the member back to `/api/payments/callback`, and also calls the webhook. Both **re-verify the transaction with Flutterwave's API** (status, amount, currency and reference must match) before anything is credited, and crediting is idempotent, so a payment can never be applied twice.
 - A slow bank transfer shows as *Pending* with a **Check again** button.
 
@@ -190,7 +193,7 @@ src/
     api/               auth, profile, payments (initiate/callback/webhook/verify),
                        pickups, ops board, notifications, push, admin, cron
     dashboard/         member home with the Trash filled button and recent payments
-    membership/        registration + monthly dues
+    wallet/            registration, credit balance, top-ups and credit history
     payments/          member payment history and printable receipts
     ops/               crew & management live board, request details, history
     admin/             super admin overview, payments (+ CSV export), people and member

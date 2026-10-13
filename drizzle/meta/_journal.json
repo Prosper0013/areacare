@@ -29,6 +29,13 @@
       "when": 1791896546033,
       "tag": "0003_payment_cancelled",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791899933348,
+      "tag": "0004_wallet",
+      "breakpoints": true
     }
   ]
 }

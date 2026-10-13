@@ -2,7 +2,7 @@
   "name": "areacare",
   "version": "1.0.0",
   "private": true,
-  "description": "AreaCare — on-demand household waste pickup with Flutterwave membership billing.",
+  "description": "AreaCare — on-demand household waste pickup with pay-as-you-go Flutterwave credit.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
