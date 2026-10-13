@@ -2,7 +2,7 @@
 
 On-demand household waste pickup. Members register their home, pay a registration fee and monthly dues through **Flutterwave**, and press **Trash filled** when their bin is full. Management and the crew assigned to that area are alerted instantly with the member's house details and live location.
 
-Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Drizzle ORM and PostgreSQL. Designed to run free on **Vercel + Supabase**.
+Built with Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Drizzle ORM and PostgreSQL. Designed to run free on **Vercel + Neon** (or Supabase).
 
 ---
 
@@ -60,15 +60,26 @@ A backup GitHub Actions workflow (`.github/workflows/keep-alive.yml`) pings the 
    ```
    (Or use GitHub Desktop / drag-and-drop upload on github.com — don't upload `node_modules` if you created one.)
 
-### 2. Create the free database (Supabase)
+### 2. Create the free database
+
+#### Option A — Neon (simplest)
+1. Neon console → your project → **Connect** (top right). Database: `neondb`.
+2. With **Connection pooling ON**, copy the string → this is `DATABASE_URL` (its host contains `-pooler`).
+3. Switch **Connection pooling OFF**, copy again → this is `DIRECT_URL`.
+4. Open **SQL Editor**, paste the whole of **`neon-setup.sql`** (in this project's root folder) and click **Run**. That creates every table, the fees, the Abuja zones and a starter crew — no terminal needed.
+5. Skip step 3 below. After deploying, **sign up in the app with your `SUPER_ADMIN_EMAIL`** — that account becomes the super admin automatically.
+
+Paste Neon's strings exactly as shown, including `?sslmode=require&channel_binding=require`; the app adjusts them for its database driver. Neon pauses idle compute after a few minutes and wakes it on the next request (the first page load after a quiet spell can take a second longer); your data is never deleted.
+
+#### Option B — Supabase
 1. Sign up at **supabase.com** → **New project**. Pick the region closest to Nigeria (e.g. *West EU* or *Central EU*). Save the database password.
 2. Open **Connect** (top bar) → **ORMs / Connection string**:
    - Copy the **Transaction pooler** URL (port **6543**) → this is `DATABASE_URL`.
    - Copy the **Session pooler** or **Direct** URL (port **5432**) → this is `DIRECT_URL`.
    - Replace `[YOUR-PASSWORD]` in both with your database password.
 
-### 3. Create the tables and the super admin
-On your computer (needs Node.js 20+):
+### 3. Create the tables and the super admin (Supabase, or Neon from a terminal)
+Skip this if you ran `neon-setup.sql`. Otherwise, on your computer (needs Node.js 20+):
 ```bash
 npm install
 cp .env.example .env        # then fill in DATABASE_URL, DIRECT_URL, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD
@@ -133,7 +144,7 @@ That switches on both workflows: confirmation reminders every 30 minutes, and th
 
 ## Updating an existing deployment
 
-If you already deployed an earlier version, run `npm run db:migrate` once against your database after pulling the new code. It adds the new pickup confirmation columns; nothing is deleted.
+If you already deployed an earlier version against a database that has data in it, run `npm run db:migrate` once after pulling the new code. It adds any new columns; nothing is deleted. (A brand-new Neon database set up with `neon-setup.sql` is already up to date.)
 
 ## How payments work
 

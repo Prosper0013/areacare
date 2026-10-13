@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import postgres from "postgres";
+import { cleanDbUrl } from "../src/db/url";
 import * as schema from "../src/db/schema";
 
 const ZONES = [
@@ -24,7 +25,7 @@ const ZONES = [
 async function main() {
   const url = process.env.DIRECT_URL || process.env.DATABASE_URL;
   if (!url) throw new Error("Set DATABASE_URL first.");
-  const sql = postgres(url, { max: 1, prepare: false });
+  const sql = postgres(cleanDbUrl(url)!, { max: 1, prepare: false });
   const db = drizzle(sql, { schema });
 
   await db
