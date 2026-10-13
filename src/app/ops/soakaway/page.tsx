@@ -19,6 +19,7 @@ const TABS: { key: SoakawayStatus; label: string }[] = [
   { key: "COMPLETED", label: "Completed" },
   { key: "AWAITING_PAYMENT", label: "Not paid" },
   { key: "REJECTED", label: "Declined" },
+  { key: "CANCELLED", label: "Cancelled" },
 ];
 
 /** Lagos-local "yyyy-mm-ddThh:mm" for the reschedule picker. */
